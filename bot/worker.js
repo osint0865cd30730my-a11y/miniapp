@@ -14,7 +14,7 @@
  */
 
 const APP_BASE = "https://osint0865cd30730my-a11y.github.io/miniapp/";
-const APP_VERSION = "2"; // збільшувати після великих оновлень, щоб Telegram не показував стару копію
+const APP_VERSION = "3"; // збільшувати після великих оновлень, щоб Telegram не показував стару копію
 const APP_URL = APP_BASE + "?v=" + APP_VERSION;
 const APP_LINK = "https://t.me/lexa_praktyka_bot/praktyka";
 const COVER_URL = APP_BASE + "cover.png";

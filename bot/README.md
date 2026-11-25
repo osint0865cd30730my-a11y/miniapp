@@ -71,4 +71,4 @@ export("index.html")   # шлях до зібраного index.html
 
 ## Версія застосунку в адресі
 
-Кнопки бота й BotFather відкривають застосунок за адресою з `?v=2`. Telegram на телефонах тримає копію сторінки, тож після великого оновлення застосунку збільшіть номер: `APP_VERSION` у `bot/worker.js` і адресу в BotFather (`/setmenubutton` і `/myapps` → Edit Web App URL).
+Кнопки бота й BotFather відкривають застосунок за адресою з `?v=3`. Telegram на телефонах тримає копію сторінки, тож після великого оновлення застосунку збільшіть номер: `APP_VERSION` у `bot/worker.js` і адресу в BotFather (`/setmenubutton` і `/myapps` → Edit Web App URL).
