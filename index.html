@@ -1,129 +1,144 @@
-<!doctype html><html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><script src="https://telegram.org/js/telegram-web-app.js?59"></script><style>*,*::before,*::after{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style></head><body><title>LEX_A Судова практика</title>
+<!doctype html><html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet"><script src="https://telegram.org/js/telegram-web-app.js?59"></script><style>*,*::before,*::after{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style></head><body><title>LEX_A Судова практика</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
-/* Layout: one phone-width column (Telegram Mini App), sticky header, grouped lists, fixed tab bar.
-   In the real Mini App each token maps to a Telegram theme variable (--tg-theme-*). */
-:root{
-  --bg:#efeff4; --surface:#ffffff; --text:#000000; --hint:#707579; --sect:#6d6d72;
-  --link:#2481cc; --btn:#2481cc; --btn-text:#ffffff; --sep:#d9d9de; --fill:#e9e9ee;
-  --ok:#2e9d48; --warn:#c77700; --bad:#d93a35; --teal:#0f8f96; --violet:#7d55c7; --grey:#8e8e93;
-  --ok-bg:#e4f4e8; --warn-bg:#fbefd9; --bad-bg:#fbe6e5; --info-bg:#e3effa;
-  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-  --r:12px;
+/* LEX_A — фірмовий стиль (темний, синьо-золотий). Ті самі класи, що й у нативній версії;
+   тема однакова для світлої й темної схеми Telegram. Попередня версія: index_nativnyi_2026-11-25.html */
+:root,:root[data-theme="light"],:root[data-theme="dark"]{
+  --bg:#060706; --surface:rgba(255,255,255,.055); --card:rgba(255,255,255,.055); --text:#F4F6F4; --hint:#A1A8A1; --sect:#A7AEA7;
+  --link:#8FBAFF; --btn:#3D8BFF; --btn-text:#FFFFFF; --sep:rgba(255,255,255,.08); --fill:rgba(255,255,255,.07);
+  --line:rgba(255,255,255,.09); --blue:#3D8BFF; --gold:#FFC23D; --gold-t:#FFD27A;
+  --ok:#3ECF8E; --warn:#FFC23D; --bad:#FF6B5E; --teal:#4FC3D9; --violet:#A98BF0; --grey:#7E857E;
+  --ok-bg:rgba(62,207,142,.14); --warn-bg:rgba(255,194,61,.14); --bad-bg:rgba(255,107,94,.15); --info-bg:rgba(61,139,255,.16);
+  --grad:linear-gradient(90deg,#FFC23D 0%,#7FB0FF 100%);
+  --font:"Manrope",-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --r:18px; color-scheme:dark;
 }
-@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
-  --bg:#000000; --surface:#1c1c1d; --text:#ffffff; --hint:#98989e; --sect:#8d8e93;
-  --link:#4b9bf5; --btn:#3e88f7; --btn-text:#ffffff; --sep:#38383a; --fill:#2c2c2e;
-  --ok:#3ecf5e; --warn:#f0a531; --bad:#ff5b54; --teal:#35c2c9; --violet:#a98bf0; --grey:#8e8e93;
-  --ok-bg:#12301a; --warn-bg:#3a2a0c; --bad-bg:#3b1716; --info-bg:#11263d; color-scheme:dark } }
-:root[data-theme="dark"]{
-  --bg:#000000; --surface:#1c1c1d; --text:#ffffff; --hint:#98989e; --sect:#8d8e93;
-  --link:#4b9bf5; --btn:#3e88f7; --btn-text:#ffffff; --sep:#38383a; --fill:#2c2c2e;
-  --ok:#3ecf5e; --warn:#f0a531; --bad:#ff5b54; --teal:#35c2c9; --violet:#a98bf0; --grey:#8e8e93;
-  --ok-bg:#12301a; --warn-bg:#3a2a0c; --bad-bg:#3b1716; --info-bg:#11263d; color-scheme:dark }
-
 *{box-sizing:border-box}
-html,body{height:100%}
-body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:16px;line-height:1.35;-webkit-font-smoothing:antialiased}
+html,body{min-height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:16px;line-height:1.4;-webkit-font-smoothing:antialiased}
+body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:radial-gradient(ellipse 80vw 42vh at 6vw 0,rgba(61,139,255,.30) 0%,rgba(61,139,255,0) 70%),
+             radial-gradient(ellipse 75% 38% at 100% 100%,rgba(255,194,61,.16) 0%,rgba(255,194,61,0) 70%)}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
 button,input,select,textarea{font:inherit;color:inherit}
 button{background:none;border:0;padding:0;cursor:pointer;text-align:left}
 a{color:var(--link);text-decoration:none}
-:focus-visible{outline:2px solid var(--link);outline-offset:2px;border-radius:6px}
+:focus-visible{outline:2px solid var(--link);outline-offset:2px;border-radius:8px}
 
-.app{max-width:480px;margin:0 auto;padding-bottom:calc(28px + env(safe-area-inset-bottom,0px))}
-.hdr{position:sticky;top:calc(env(safe-area-inset-top,0px) + 57px);z-index:5;background:var(--bg);display:flex;align-items:center;gap:8px;
-  padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));min-height:48px}
-.hdr h1{font-size:17px;font-weight:600;margin:0;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.back{color:var(--link);font-size:17px;padding:4px 6px 4px 0;flex:none}
-.demo{flex:none;display:inline-block;vertical-align:middle;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--warn);background:var(--warn-bg);padding:3px 7px;border-radius:6px}
-.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:8px}
+.app{max-width:480px;margin:0 auto;padding-bottom:calc(104px + env(safe-area-inset-bottom,0px))}
+.hdr{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;display:flex;align-items:center;gap:10px;
+  background:radial-gradient(ellipse 80vw 42vh at 6vw 0,rgba(61,139,255,.30) 0%,rgba(61,139,255,0) 70%),rgba(6,7,6,.94);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  padding-block:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));min-height:56px}
+.hero + .hdr{position:static;background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none}
+.hdr h1{font-size:17px;font-weight:800;letter-spacing:-.01em;margin:0;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hdr.top h1{font-size:22px;letter-spacing:-.02em}
+.hdr .mk{width:28px;height:28px;flex:none}
+.back{flex:none;display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 12px 0 10px;border-radius:999px;
+  background:var(--fill);border:1px solid var(--line);color:var(--text);font-size:15px;font-weight:600}
+.demo{flex:none;display:inline-block;vertical-align:middle;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--gold-t);background:var(--warn-bg);border:1px solid rgba(255,194,61,.32);padding:3px 8px;border-radius:999px}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:10px}
 
-.sh{font-size:13px;color:var(--sect);text-transform:uppercase;letter-spacing:.03em;margin:14px 16px 0}
-.note{font-size:13px;color:var(--hint);margin:0 16px 4px;line-height:1.4}
-.vxq{margin:0;padding:8px 12px;border-left:3px solid var(--link);background:var(--fill);font-size:14px;line-height:1.45;border-radius:0 8px 8px 0;white-space:pre-wrap}
-.group{background:var(--surface);border-radius:var(--r);overflow:hidden}
-.row{display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;min-height:44px;position:relative}
+.hero{display:flex;flex-direction:column;align-items:center;gap:6px;padding:calc(28px + env(safe-area-inset-top,0px)) 16px 8px;text-align:center}
+.hero .mk{width:76px;height:76px;filter:drop-shadow(0 10px 26px rgba(61,139,255,.45))}
+.hero-w{font-size:40px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.hero-w span{background:linear-gradient(180deg,#7FB0FF,#FFC23D);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero-s{font-size:14px;font-weight:600;color:var(--sect)}
+
+.sh{font-size:12px;font-weight:800;color:var(--sect);text-transform:uppercase;letter-spacing:.07em;margin:16px 16px 2px}
+.wrap .sh{margin-left:2px;margin-right:2px}
+.note{font-size:13px;color:var(--hint);margin:0 16px 4px;line-height:1.45}
+.wrap .note{margin-left:2px;margin-right:2px}
+.vxq{margin:0;padding:10px 14px;border-left:3px solid var(--gold);background:var(--fill);font-size:14px;line-height:1.5;border-radius:0 12px 12px 0;white-space:pre-wrap}
+.group{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.group:has(.thesis){border:1px solid transparent;background:linear-gradient(#0E110E,#0E110E) padding-box,linear-gradient(135deg,rgba(61,139,255,.9),rgba(255,194,61,.9)) border-box}
+.row{display:flex;align-items:center;gap:12px;width:100%;padding:12px 16px;min-height:48px;position:relative}
 .row + .row::before{content:"";position:absolute;top:0;left:16px;right:0;height:1px;background:var(--sep)}
 .row .main{flex:1;min-width:0}
-.row .t{font-size:16px}
-.row .s{font-size:13px;color:var(--hint);margin-top:2px}
-.row .v{color:var(--hint);font-size:15px;flex:none;text-align:right;font-variant-numeric:tabular-nums}
-.row .chev{color:var(--hint);opacity:.6;flex:none;font-size:18px;line-height:1}
+.row .t{font-size:16px;font-weight:600}
+.row .s{font-size:13px;color:var(--hint);margin-top:3px}
+.row .v{color:var(--gold-t);font-weight:700;font-size:15px;flex:none;text-align:right;font-variant-numeric:tabular-nums}
+.row .chev{color:var(--hint);opacity:.7;flex:none;font-size:20px;line-height:1}
 button.row:active,a.row:active{background:var(--fill)}
 a.row{color:var(--link)}
-.pad{padding:14px 16px}
+.pad{padding:16px}
 
-.search{width:100%;background:var(--fill);border:0;border-radius:10px;padding:9px 12px;font-size:16px}
+.search{width:100%;background:var(--fill);border:1px solid var(--line);border-radius:14px;padding:12px 14px 12px 42px;font-size:16px;outline:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23A1A8A1' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M20 20l-4.2-4.2'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:14px 50%;background-size:19px}
+.search:focus{border-color:rgba(127,176,255,.6)}
 .search::placeholder{color:var(--hint)}
 
-.badge{display:inline-block;font-size:12px;font-weight:600;padding:2px 7px;border-radius:6px;white-space:nowrap}
+.badge{display:inline-block;font-size:12px;font-weight:800;padding:3px 8px;border-radius:8px;white-space:nowrap}
 .b-ok{color:var(--ok);background:var(--ok-bg)} .b-bad{color:var(--bad);background:var(--bad-bg)}
-.b-warn{color:var(--warn);background:var(--warn-bg)} .b-info{color:var(--link);background:var(--info-bg)}
+.b-warn{color:var(--gold-t);background:var(--warn-bg)} .b-info{color:#A9C9FF;background:var(--info-bg)}
 .b-mute{color:var(--hint);background:var(--fill)}
 
-.alert{border-radius:var(--r);padding:12px 16px;font-size:14px;line-height:1.4}
-.alert b{display:block;font-size:15px;margin-bottom:2px}
-.a-bad{background:var(--bad-bg)} .a-bad b{color:var(--bad)}
-.a-warn{background:var(--warn-bg)} .a-warn b{color:var(--warn)}
-.a-info{background:var(--info-bg)} .a-info b{color:var(--link)}
+.alert{border-radius:var(--r);padding:14px 16px;font-size:14px;line-height:1.45;border:1px solid var(--line)}
+.alert b{display:block;font-size:15px;margin-bottom:3px}
+.a-bad{background:var(--bad-bg);border-color:rgba(255,107,94,.3)} .a-bad b{color:var(--bad)}
+.a-warn{background:var(--warn-bg);border-color:rgba(255,194,61,.3)} .a-warn b{color:var(--gold-t)}
+.a-info{background:var(--info-bg);border-color:rgba(61,139,255,.3)} .a-info b{color:#A9C9FF}
 
-.thesis{font-size:19px;font-weight:600;line-height:1.3;margin:0 0 8px;text-wrap:balance}
-.body{font-size:15px;line-height:1.5;margin:0}
+.thesis{font-size:19px;font-weight:700;line-height:1.35;margin:0 0 8px;text-wrap:balance}
+.body{font-size:15px;line-height:1.55;margin:0;color:#E6EAE6}
 
 .chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px;scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
-.chip{flex:none;font-size:14px;padding:6px 12px;border-radius:16px;background:var(--surface);color:var(--text);white-space:nowrap}
-.chip[aria-pressed="true"]{background:var(--btn);color:var(--btn-text)}
-.seg{display:flex;background:var(--fill);border-radius:9px;padding:2px}
-.seg button{flex:1;text-align:center;font-size:13px;font-weight:500;padding:6px 4px;border-radius:7px}
-.seg button[aria-pressed="true"]{background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.chip{flex:none;font-size:14px;font-weight:600;padding:8px 14px;border-radius:999px;background:var(--fill);border:1px solid var(--line);color:#C9CFC9;white-space:nowrap}
+.chip[aria-pressed="true"]{background:rgba(61,139,255,.22);border-color:rgba(127,176,255,.7);color:#FFFFFF}
+.seg{display:flex;gap:2px;background:var(--fill);border:1px solid var(--line);border-radius:14px;padding:3px}
+.seg button{flex:1;text-align:center;font-size:13px;font-weight:600;color:var(--sect);padding:8px 4px;border-radius:11px}
+.seg button[aria-pressed="true"]{background:rgba(255,255,255,.13);color:#FFFFFF;font-weight:800}
 
-.stack{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--fill)}
+.stack{display:flex;gap:2px;height:14px;border-radius:7px;overflow:hidden;background:var(--fill)}
 .stack i{display:block;height:100%}
 .mini{height:6px;border-radius:3px}
 .cmpB{background:var(--violet)}
 .cmpsel{display:grid;grid-template-columns:1fr 1fr;gap:8px}.cmpsel>div{min-width:0}.cmpsel .sel{font-size:15px;padding:12px}
 .legend{display:flex;flex-wrap:wrap;gap:12px;margin:8px 4px 0;font-size:13px;color:var(--hint)}.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
-.v2{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-variant-numeric:tabular-nums;font-size:14px;white-space:nowrap;margin-left:8px}.v2 b{font-weight:600}.v2 .ca{color:var(--teal)}.v2 .cb{color:var(--violet)}
+.v2{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-variant-numeric:tabular-nums;font-size:14px;white-space:nowrap;margin-left:8px}.v2 b{font-weight:700}.v2 .ca{color:var(--teal)}.v2 .cb{color:var(--violet)}
 .c1{background:var(--ok)} .c2{background:var(--grey)} .c3{background:var(--teal)}
 .c4{background:var(--bad)} .c5{background:var(--warn)} .c6{background:var(--violet)}
 .dot{width:10px;height:10px;border-radius:3px;flex:none}
 .num{font-variant-numeric:tabular-nums}
 
-.btns{display:flex;gap:8px}
-.btn{flex:1;text-align:center;padding:11px 10px;border-radius:10px;font-size:15px;font-weight:600;background:var(--btn);color:var(--btn-text)}
-.btn.ghost{background:var(--surface);color:var(--link)}
-.sw{flex:none;width:50px;height:30px;border-radius:15px;background:var(--fill);position:relative;transition:background .15s}
-.sw::after{content:"";position:absolute;top:2px;left:2px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .15s}
-.sw[aria-checked="true"]{background:var(--ok)} .sw[aria-checked="true"]::after{transform:translateX(20px)}
-.pager{display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px 14px}.pager button{min-width:36px;height:36px;padding:0 8px;border-radius:8px;background:var(--fill);color:var(--link);font-size:15px}.pager button[aria-current]{background:var(--link);color:#fff;font-weight:600}
+.btns{display:flex;gap:10px}
+.btn{flex:1;text-align:center;padding:14px 12px;border-radius:16px;font-size:15px;font-weight:800;background:var(--grad);color:#0A0C0A}
+.btn.ghost{background:var(--fill);border:1px solid var(--line);color:var(--text)}
+.sw{flex:none;width:50px;height:30px;border-radius:15px;background:rgba(255,255,255,.14);position:relative;transition:background .15s}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.4);transition:transform .15s}
+.sw[aria-checked="true"]{background:var(--blue)} .sw[aria-checked="true"]::after{transform:translateX(20px)}
+.pager{display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px 14px}.pager button{min-width:38px;height:38px;padding:0 8px;border-radius:10px;background:var(--fill);color:var(--link);font-size:15px;font-weight:600}.pager button[aria-current]{background:var(--blue);color:#fff;font-weight:800}
 button.row[disabled]{opacity:.55;cursor:default}
 .cmp button.row[disabled]{opacity:1}
-select.sel{width:100%;background:var(--surface);border:0;border-radius:var(--r);padding:12px 16px;font-size:16px}
-textarea.ta{width:100%;min-height:150px;background:var(--surface);border:0;border-radius:var(--r);padding:12px 16px;font-size:15px;line-height:1.45;resize:vertical}
+select.sel{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:13px 16px;font-size:16px}
+select.sel option{background:#151815;color:#F4F6F4}
+textarea.ta{width:100%;min-height:150px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 16px;font-size:15px;line-height:1.5;resize:vertical}
 
 .bxrow{padding:12px 16px;position:relative}
 .bxrow + .bxrow::before{content:"";position:absolute;top:0;left:16px;right:0;height:1px;background:var(--sep)}
-.bxhead{display:flex;justify-content:space-between;gap:8px;font-size:15px}
-.bxhead span:last-child{color:var(--hint);font-size:13px;flex:none}
-.bx{position:relative;height:22px;margin-top:8px;background:var(--fill);border-radius:4px}
+.bxhead{display:flex;justify-content:space-between;gap:8px;font-size:15px;font-weight:600}
+.bxhead span:last-child{color:var(--hint);font-size:13px;font-weight:500;flex:none}
+.bx{position:relative;height:22px;margin-top:8px;background:var(--fill);border-radius:6px}
 .bx .band{position:absolute;top:0;bottom:0;min-width:3px;background:var(--info-bg);border-left:1px solid var(--link);border-right:1px solid var(--link)}
-.bx .wh{position:absolute;top:10px;height:2px;min-width:2px;background:var(--text);opacity:.55}
-.bx .box{position:absolute;top:4px;bottom:4px;min-width:8px;background:var(--btn);border-radius:3px;opacity:.85}
-.bx .med{position:absolute;top:1px;bottom:1px;width:3px;margin-left:-1px;background:var(--text);border-radius:2px}
+.bx .wh{position:absolute;top:10px;height:2px;min-width:2px;background:var(--text);opacity:.5}
+.bx .box{position:absolute;top:4px;bottom:4px;min-width:8px;background:linear-gradient(90deg,#3D8BFF,#7FB0FF);border-radius:4px}
+.bx .med{position:absolute;top:1px;bottom:1px;width:3px;margin-left:-1px;background:var(--gold);border-radius:2px}
 .bxsum{font-size:13px;color:var(--hint);margin-top:6px}
 .axis{position:relative;height:16px;font-size:11px;color:var(--hint);margin:0 16px}
 .axis span{position:absolute;transform:translateX(-50%);font-variant-numeric:tabular-nums}
 
-.tabbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:6;max-width:480px;margin:0 auto;background:var(--surface);border-bottom:1px solid var(--sep);
-  padding-left:max(4px,env(safe-area-inset-left,0px));padding-right:max(4px,env(safe-area-inset-right,0px))}
-.tabs{display:flex;height:56px}
-.tab{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:4px 2px;font-size:11px;font-weight:500;color:var(--hint);text-align:center}
-.tab svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
-.tab[aria-current="page"]{color:var(--link);box-shadow:inset 0 -2px 0 var(--link)}
-.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--text);color:var(--bg);
-  font-size:14px;padding:9px 14px;border-radius:10px;z-index:9;max-width:90%}
+.tabbar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:6;max-width:480px;margin:0 auto;
+  background:rgba(8,10,8,.82);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid var(--sep);
+  padding-bottom:env(safe-area-inset-bottom,0px);padding-left:max(4px,env(safe-area-inset-left,0px));padding-right:max(4px,env(safe-area-inset-right,0px))}
+.tabs{display:flex;height:64px}
+.tabbar:has(.tabs:empty){display:none}
+.tab{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:6px 2px 4px;font-size:11px;font-weight:600;color:#8C938C;text-align:center;position:relative}
+.tab svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tab[aria-current="page"]{color:#FFFFFF;font-weight:800}
+.tab[aria-current="page"]::after{content:"";position:absolute;bottom:4px;left:50%;width:18px;height:3px;margin-left:-9px;border-radius:2px;background:var(--grad)}
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#F4F6F4;color:#060706;font-weight:600;
+  font-size:14px;padding:10px 16px;border-radius:14px;z-index:9;max-width:90%}
 @media (min-width:520px){ .app{border-left:1px solid var(--sep);border-right:1px solid var(--sep)} }
 @media (prefers-reduced-motion:reduce){ .sw,.sw::after{transition:none} }
 </style>
@@ -227,7 +242,8 @@ const MOCK = '<span class="demo">Макет</span>';
 /* ===== Позиції (справжні дані) ===== */
 function posRow(p){ const d=p.d[0]||[];
   return '<button class="row" data-a="pos" data-v="'+p.i+'"><span class="main"><span class="t" style="font-size:15px">'+esc(p.h||p.t)+'</span><div class="s">'+court(p)+(d[1]?' · '+fd(d[1]):'')+(p.r.length?' · '+esc(p.r.slice(0,2).join(", ")):'')+'</div>'+(p.m?'<div class="s">'+mBadge(p)+'</div>':'')+'</span><span class="chev">›</span></button>'; }
-function header(title,back,mock){ return '<header class="hdr">'+(back?'<button class="back" data-a="back" aria-label="Назад">‹ Назад</button>':'')+'<h1>'+esc(title)+'</h1>'+(mock?'<span class="demo" title="Числа й приклади на цьому екрані умовні">Макет</span>':'')+'</header>'; }
+const MARK='<svg class="mk" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="lxg" gradientUnits="userSpaceOnUse" x1="40" y1="14" x2="66" y2="86"><stop offset="0" stop-color="#3D8BFF"/><stop offset="1" stop-color="#FFC23D"/></linearGradient></defs><g transform="translate(-1 0)"><path d="M18 28 L32 14 L44 14 L44 64 L66 64 L66 78 L58 86 L18 86 Z" fill="url(#lxg)"/><rect x="72" y="76" width="14" height="10" rx="2" fill="url(#lxg)"/></g></svg>';
+function header(title,back,mock){ return '<header class="hdr'+(back?'':' top')+'">'+(back?'<button class="back" data-a="back" aria-label="Назад">‹ Назад</button>':MARK)+'<h1>'+esc(title)+'</h1>'+(mock?'<span class="demo" title="Числа й приклади на цьому екрані умовні">Макет</span>':'')+'</header>'; }
 function listHTML(list,limit){ const n=limit||60, show=list.slice(0,n);
   return (show.length?'<div class="group">'+show.map(posRow).join("")+'</div>':'')+(list.length>n?'<p class="note">Показано '+n+' із '+list.length+'. Уточніть запит, щоб звузити добірку.</p>':''); }
 function search(q){ const tk=q.toLowerCase().split(/\s+/).filter(Boolean); return POS.filter(p=>tk.every(t=>p._s.includes(t))); }
@@ -328,7 +344,7 @@ function vList111(){
 }
 /* ===== Вироки за підслідністю СБУ: відкриті дані ДСА (D.g) ===== */
 let G = D.g; const GS = D.g, GSP = D.gp, GV = D.gv, GD = D.gd, GB = D.gb;
-const perSel = () => (GSP&&(G===GS||G===GSP))?'<div class="chips" style="margin:0 0 10px">'+[["war","Після 24.02.2022"],["pre","До 24.02.2022"]].map(x=>'<button class="chip"'+(S.per===x[0]?' style="background:var(--link);color:#fff"':'')+' data-a="per" data-v="'+x[0]+'">'+x[1]+'</button>').join("")+'</div>'+(S.per==="pre"?'<p class="note" style="margin-top:0">Вироки до 24.02.2022 (з '+GSP.from+'): відкриті дані ДСА, архіви з 2018 р.; закриті тексти не враховано. Ст. 111-1, 111-2 тоді не існувало, санкції ст. 110, 111 змінювалися — порівнювати з воєнним періодом обережно.</p>':''):'';
+const perSel = () => (GSP&&(G===GS||G===GSP))?'<div class="chips" style="margin:0 0 10px">'+[["war","Після 24.02.2022"],["pre","До 24.02.2022"]].map(x=>'<button class="chip"'+(S.per===x[0]?' aria-pressed="true"':'')+' data-a="per" data-v="'+x[0]+'">'+x[1]+'</button>').join("")+'</div>'+(S.per==="pre"?'<p class="note" style="margin-top:0">Вироки до 24.02.2022 (з '+GSP.from+'): відкриті дані ДСА, архіви з 2018 р.; закриті тексти не враховано. Ст. 111-1, 111-2 тоді не існувало, санкції ст. 110, 111 змінювалися — порівнювати з воєнним періодом обережно.</p>':''):'';
 const ARTF = {"305":"Контрабанда наркотичних засобів, психотропних речовин, їх аналогів чи прекурсорів або фальсифікованих лікарських засобів","333":"Порушення порядку здійснення міжнародних передач товарів, що підлягають державному експортному контролю","359":"Незаконні придбання, збут або використання спеціальних технічних засобів отримання інформації","332-2":"Незаконний перетин державного кордону України","110-2":"Фінансування дій, вчинених з метою насильницької зміни чи повалення конституційного ладу або захоплення державної влади, зміни меж території або державного кордону України","334":"Порушення правил міжнародних польотів","328":"Розголошення державної таємниці","258-5":"Фінансування тероризму","422":"Розголошення відомостей військового характеру, що становлять державну таємницю, або втрата документів чи матеріалів, що містять такі відомості","332-1":"Порушення порядку в’їзду на тимчасово окуповану територію України та виїзду з неї","201-1":"Контрабанда лісоматеріалів та цінних порід дерев","201-3":"Контрабанда товарів","201-4":"Контрабанда підакцизних товарів","211":"Видання нормативно-правових актів, що зменшують надходження бюджету або збільшують витрати бюджету всупереч закону","220-2":"Фальсифікація фінансових документів та звітності фінансової організації","233":"Незаконна приватизація державного, комунального майна","204":"Незаконне виготовлення, зберігання, збут або транспортування з метою збуту підакцизних товарів","358":"Підроблення документів, печаток, штампів та бланків, збут чи використання підроблених документів, печаток, штампів","199":"Виготовлення, зберігання, придбання, перевезення, ввезення або збут підроблених грошей","200":"Незаконні дії з документами на переказ, платіжними картками та іншими засобами доступу до банківських рахунків","203-2":"Незаконна діяльність з організації або проведення азартних ігор, лотерей","206-2":"Протиправне заволодіння майном підприємства, установи, організації","210":"Нецільове використання бюджетних коштів","212":"Ухилення від сплати податків, зборів (обов’язкових платежів)","212-1":"Ухилення від сплати єдиного внеску","222":"Шахрайство з фінансовими ресурсами","229":"Незаконне використання знака для товарів і послуг, фірмового найменування","405":"Погроза або насильство щодо начальника","406":"Порушення статутних правил взаємовідносин між військовослужбовцями за відсутності відносин підлеглості","408":"Дезертирство","409":"Ухилення від військової служби шляхом самокалічення або іншим способом","410":"Викрадення, привласнення, вимагання військовослужбовцем зброї, бойових припасів, військової техніки або заволодіння ними","413":"Втрата військового майна","414":"Порушення правил поводження зі зброєю, речовинами і предметами, що становлять підвищену небезпеку для оточення","415":"Порушення правил водіння або експлуатації машин","425":"Недбале ставлення до військової служби","426-1":"Перевищення військовою службовою особою влади чи службових повноважень","190":"Шахрайство","191":"Привласнення, розтрата майна або заволодіння ним шляхом зловживання службовим становищем","209":"Легалізація майна, одержаного злочинним шляхом","364":"Зловживання владою або службовим становищем","366":"Службове підроблення","366-1":"Декларування недостовірної інформації","366-2":"Декларування недостовірної інформації","368":"Прийняття пропозиції, обіцянки або одержання неправомірної вигоди службовою особою","369":"Пропозиція, обіцянка або надання неправомірної вигоди службовій особі","369-2":"Зловживання впливом","109":"Насильницька зміна чи повалення конституційного ладу","110":"Посягання на територіальну цілісність України","111":"Державна зрада","111-1":"Колабораційна діяльність","111-2":"Пособництво державі-агресору","113":"Диверсія","114-1":"Перешкоджання діяльності ЗСУ","114-2":"Поширення інформації про переміщення ЗСУ","201":"Контрабанда","258":"Терористичний акт","258-3":"Терористична група чи організація","436":"Пропаганда війни","436-2":"Виправдовування збройної агресії РФ","438":"Порушення законів та звичаїв війни"};
 const REGS = (G.reg?Object.keys(G.reg).filter(g=>g!=="*"&&g!=="не визначено").sort((a,b)=>a.localeCompare(b,"uk")):[]);
 const vyr = n => n+" "+(n%10===1&&n%100!==11?"вирок":[2,3,4].includes(n%10)&&![12,13,14].includes(n%100)?"вироки":"вироків");
@@ -534,7 +550,7 @@ const VAKS={n:395,years:[["2019",2],["2020",20],["2021",34],["2022",41],["2023",
  arts:[["368","Прийняття пропозиції, обіцянки або одержання неправомірної вигоди",96],["364","Зловживання владою або службовим становищем",90],["191","Привласнення, розтрата майна",83],["369","Пропозиція, обіцянка або надання неправомірної вигоди",66],["366","Службове підроблення",53],["369-2","Зловживання впливом",33],["209","Легалізація майна, одержаного злочинним шляхом",25],["190","Шахрайство",23]],
  ap:{vyr:21,od:112,vs:160,vsod:11}};
 function vInstPick(){
-  return '<header class="hdr"><h1>З чим ви працюєте?</h1><span class="demo">Макет</span></header><div class="wrap"><p class="note" style="margin-top:0">Від вибору залежать розділи застосунку. Змінити можна будь-коли в розділі «Стежу».</p><div class="group">'+
+  return '<div class="hero">'+MARK+'<div class="hero-w">LEX<span>_</span>A</div><div class="hero-s">Практика Верховного Суду</div></div><header class="hdr"><h1>З чим ви працюєте?</h1><span class="demo">Макет</span></header><div class="wrap"><p class="note" style="margin-top:0">Від вибору залежать розділи застосунку. Змінити можна будь-коли в розділі «Стежу».</p><div class="group">'+
    Object.keys(INST).map(k=>'<button class="row" data-a="inst" data-v="'+k+'"><span class="main"><span class="t">'+INST[k][0]+'</span><div class="s" style="font-size:14px">'+INST[k][1]+'</div></span><span class="chev">›</span></button>').join("")+'</div></div>';
 }
 function instBlock(){
@@ -562,7 +578,7 @@ function vVapp(){
    '<div class="sh">У базі також</div><div class="group">'+[["Вироки Апеляційної палати ВАКС",VAKS.ap.vyr],["Постанови ВС у справах ВАКС",VAKS.ap.vs],["Окремі думки суддів ВАКС і Апеляційної палати",VAKS.ap.od]].map(r=>'<div class="row"><span class="main t" style="font-size:15px">'+r[0]+'</span><span class="v">'+r[1]+'</span></div>').join("")+
    '<button class="row" data-a="topic" data-v="postanovy-vs-u-spravakh-vaks"><span class="main"><span class="t" style="font-size:15px">Постанови ВС у справах ВАКС: де вирок скасовано або змінено</span></span><span class="chev">›</span></button><button class="row" data-a="kas" data-v="odv"><span class="main"><span class="t" style="font-size:15px">Окремі думки суддів ВАКС і Апеляційної палати: розбіжності за темами</span></span><span class="chev">›</span></button></div></div>';
 }
-function segVaks(cur){ return '<div class="chips" style="margin:0 0 10px">'+[["sbu","СБУ"],["vaks","ВАКС"],["police","Поліція"],["beb","БЕБ"],["dbr","ДБР"]].map(x=>'<button class="chip"'+(cur===x[0]?' style="background:var(--link);color:#fff"':'')+' data-a="segv" data-v="'+x[0]+'">'+x[1]+'</button>').join("")+'</div>'; }
+function segVaks(cur){ return '<div class="chips" style="margin:0 0 10px">'+[["sbu","СБУ"],["vaks","ВАКС"],["police","Поліція"],["beb","БЕБ"],["dbr","ДБР"]].map(x=>'<button class="chip"'+(cur===x[0]?' aria-pressed="true"':'')+' data-a="segv" data-v="'+x[0]+'">'+x[1]+'</button>').join("")+'</div>'; }
 
 /* ===== Навігація ===== */
 const TABS_SBU=[["positions","Позиції","M12 7a4 4 0 0 0-4-3H3v14h5a4 4 0 0 1 4 2 4 4 0 0 1 4-2h5V4h-5a4 4 0 0 0-4 3zM12 7v13"],["regions","Регіони","M12 21s-6-5.4-6-10a6 6 0 0 1 12 0c0 4.6-6 10-6 10zM12 9v4M10 11h4"],["sentencing","Покарання","M12 3v17M7 20h10M5 7h14M5 7l-3 7a3 3 0 0 0 6 0zM19 7l-3 7a3 3 0 0 0 6 0z"],["pretrial","Досудове","M10.5 17a6.5 6.5 0 1 1 0-13 6.5 6.5 0 0 1 0 13zM20 20l-4.6-4.6"],["more","Стежу","M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15zM10 21h4"]];
