@@ -18,6 +18,7 @@ const APP_VERSION = "2"; // збільшувати після великих о�
 const APP_URL = APP_BASE + "?v=" + APP_VERSION;
 const APP_LINK = "https://t.me/lexa_praktyka_bot/praktyka";
 const COVER_URL = APP_BASE + "cover.png";
+const THUMB_URL = APP_BASE + "thumb.png"; // знак «L.» у списку inline-результатів
 const DEFAULT_DATA_URL = APP_BASE + "bot.json";
 const EDRSR = "https://reyestr.court.gov.ua/Review/";
 const CHAT_PAGE = 5;
@@ -282,6 +283,9 @@ function inlineCard(p) {
     id: String(p.i),
     title: cut(p.h || p.t, 120),
     description: meta(p),
+    thumbnail_url: THUMB_URL,
+    thumbnail_width: 160,
+    thumbnail_height: 160,
     input_message_content: { message_text: body, parse_mode: "HTML", link_preview_options: { is_disabled: true } },
     reply_markup: { inline_keyboard: [buttons] },
   };
