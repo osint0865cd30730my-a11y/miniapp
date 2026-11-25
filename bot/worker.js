@@ -3,19 +3,22 @@
  * Cloudflare Worker (модульний синтаксис).
  *
  * Змінні оточення (Settings → Variables):
- *   BOT_TOKEN       секрет: токен від BotFather
- *   WEBHOOK_SECRET  секрет: будь-який довгий випадковий рядок (A–Z, a–z, 0–9, _ і -)
+ *   BOT_TOKEN       секрет: токен від BotFather (єдине обов'язкове)
+ *   WEBHOOK_SECRET  необов'язково; без нього секрет вебхука виводиться з токена
  *   DATA_URL        необов'язково; за замовчуванням bot.json поряд із застосунком
  *
  * Маршрути:
  *   POST /webhook          оновлення від Telegram (перевіряється секретний заголовок)
- *   GET  /setup?key=...    реєструє вебхук і команди; key = WEBHOOK_SECRET
+ *   GET  /setup            підключає вебхук до цього воркера й задає команди
  *   GET  /                 перевірка, що воркер живий
  */
 
-const APP_URL = "https://osint0865cd30730my-a11y.github.io/miniapp/";
+const APP_BASE = "https://osint0865cd30730my-a11y.github.io/miniapp/";
+const APP_VERSION = "2"; // збільшувати після великих оновлень, щоб Telegram не показував стару копію
+const APP_URL = APP_BASE + "?v=" + APP_VERSION;
 const APP_LINK = "https://t.me/lexa_praktyka_bot/praktyka";
-const DEFAULT_DATA_URL = APP_URL + "bot.json";
+const COVER_URL = APP_BASE + "cover.png";
+const DEFAULT_DATA_URL = APP_BASE + "bot.json";
 const EDRSR = "https://reyestr.court.gov.ua/Review/";
 const CHAT_PAGE = 5;
 const INLINE_PAGE = 20;
@@ -284,15 +287,34 @@ function inlineCard(p) {
   };
 }
 
+const WELCOME =
+  "<b>LEX_A · Практика Верховного Суду</b>\n\n" +
+  "Правові позиції ККС і Великої Палати ВС з короткими тезами, практика покарань за статтями й областями, " +
+  "питання досудового розслідування.\n\n" +
+  "<b>Шукайте прямо тут</b> — напишіть статтю, слова або номер справи:\n" +
+  "<code>ст. 111-1 ч. 5</code> · <code>обшук без ухвали</code> · <code>757/29843/19-к</code>\n\n" +
+  "<b>Надсилайте колегам</b> — в будь-якому чаті наберіть <code>@lexa_praktyka_bot</code> і запит.\n\n" +
+  "Повна база — у застосунку.";
+
 const HELP =
-  "<b>LEX_A</b> шукає правові позиції Верховного Суду.\n\n" +
-  "Напишіть статтю, слова або номер справи:\n" +
-  "• <code>ст. 111-1 ч. 5</code>\n" +
-  "• <code>обшук без ухвали</code>\n" +
-  "• <code>ст. 290 КПК відкриття матеріалів</code>\n" +
-  "• <code>757/29843/19-к</code>\n\n" +
-  "В іншому чаті наберіть <code>@lexa_praktyka_bot</code> і запит, щоб надіслати позицію співрозмовнику.\n\n" +
-  "Повна база, практика покарань і досудове розслідування — у застосунку: кнопка «Практика» зліва від поля вводу.";
+  "<b>Як шукати</b>\n\n" +
+  "<b>Стаття і частина:</b> <code>ст. 111 ч. 2</code>, <code>ч. 5 ст. 111-1</code>, <code>ст. 290 КПК</code>\n" +
+  "<b>Слова:</b> <code>обшук без ухвали</code>, <code>заочне провадження</code>, <code>438 командир</code>\n" +
+  "<b>Номер справи:</b> <code>757/29843/19-к</code>\n" +
+  "<b>Номер позиції:</b> <code>ПП 15734</code>\n\n" +
+  "Якщо назвати КК чи КПК, бот не плутатиме однакові номери статей.\n\n" +
+  "<b>В іншому чаті:</b> <code>@lexa_praktyka_bot</code> + запит → оберіть позицію, і вона вставиться карткою з посиланням на ЄДРСР.";
+
+const NON_TEXT =
+  "Я шукаю позиції Верховного Суду за текстом. Напишіть статтю, слова або номер справи, наприклад <code>ст. 111-1 ч. 5</code>.";
+
+const startKeyboard = () => ({
+  inline_keyboard: [
+    [{ text: "Відкрити LEX_A", web_app: { url: APP_URL } }],
+    [{ text: "Як шукати", callback_data: "help" },
+     { text: "Надіслати колезі", switch_inline_query: "" }],
+  ],
+});
 
 /* ---------- Telegram ---------- */
 
@@ -307,17 +329,38 @@ async function tg(env, method, body) {
   return j;
 }
 
+// Секрет вебхука: окремий WEBHOOK_SECRET, якщо задано, інакше виводиться з токена (SHA-256).
+async function hookSecret(env) {
+  if (env.WEBHOOK_SECRET) return env.WEBHOOK_SECRET;
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("lexa-webhook:" + env.BOT_TOKEN));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 48);
+}
+
+async function sendWelcome(env, chatId) {
+  const r = await tg(env, "sendPhoto", {
+    chat_id: chatId, photo: COVER_URL, caption: WELCOME, parse_mode: "HTML", reply_markup: startKeyboard(),
+  });
+  if (r.ok) return r;
+  // якщо обкладинку не вдалося надіслати — те саме текстом
+  return tg(env, "sendMessage", { chat_id: chatId, text: WELCOME, parse_mode: "HTML", reply_markup: startKeyboard() });
+}
+
+const sendHelp = (env, chatId) => tg(env, "sendMessage", {
+  chat_id: chatId, text: HELP, parse_mode: "HTML",
+  reply_markup: { inline_keyboard: [[{ text: "Спробувати: ст. 111-1", switch_inline_query_current_chat: "ст. 111-1" }],
+    [{ text: "Відкрити LEX_A", web_app: { url: APP_URL } }]] },
+});
+
 async function onMessage(env, msg) {
-  if (!msg.text || msg.chat.type !== "private") return;
-  const text = msg.text.trim();
-  if (/^\/(start|help)\b/.test(text)) {
-    return tg(env, "sendMessage", {
-      chat_id: msg.chat.id, text: HELP, parse_mode: "HTML",
-      reply_markup: { inline_keyboard: [[{ text: "Відкрити застосунок", web_app: { url: APP_URL } }],
-        [{ text: "Спробувати inline", switch_inline_query_current_chat: "ст. 111-1" }]] },
-    });
+  if (msg.chat.type !== "private") return; // у групах працює лише inline-режим
+  if (!msg.text) {
+    return tg(env, "sendMessage", { chat_id: msg.chat.id, text: NON_TEXT, parse_mode: "HTML" });
   }
-  if (text.startsWith("/")) return;
+  const text = msg.text.trim();
+  if (/^\/start\b/.test(text)) return sendWelcome(env, msg.chat.id);
+  if (/^\/help\b/.test(text)) return sendHelp(env, msg.chat.id);
+  if (text.startsWith("/")) return sendHelp(env, msg.chat.id);
+  await tg(env, "sendChatAction", { chat_id: msg.chat.id, action: "typing" });
   const data = await loadData(env);
   const q = text.slice(0, 120);
   const a = chatAnswer(q, search(data, q), 0);
@@ -328,6 +371,10 @@ async function onMessage(env, msg) {
 }
 
 async function onCallback(env, cq) {
+  if (cq.data === "help" && cq.message) {
+    await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
+    return sendHelp(env, cq.message.chat.id);
+  }
   const m = /^more:(\d+):(.*)$/s.exec(cq.data || "");
   if (!m || !cq.message) return tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
   const data = await loadData(env);
@@ -369,9 +416,10 @@ async function onInline(env, iq) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if (!env.BOT_TOKEN) return new Response("BOT_TOKEN не задано: додайте його в Settings → Variables and Secrets", { status: 500 });
 
     if (request.method === "POST" && url.pathname === "/webhook") {
-      if (request.headers.get("X-Telegram-Bot-Api-Secret-Token") !== env.WEBHOOK_SECRET) {
+      if (request.headers.get("X-Telegram-Bot-Api-Secret-Token") !== await hookSecret(env)) {
         return new Response("forbidden", { status: 403 });
       }
       const update = await request.json();
@@ -386,25 +434,22 @@ export default {
     }
 
     if (url.pathname === "/setup") {
-      if (!env.WEBHOOK_SECRET || url.searchParams.get("key") !== env.WEBHOOK_SECRET) {
-        return new Response("forbidden", { status: 403 });
-      }
+      // Лише підключає вебхук до цього ж воркера й задає команди; повторний виклик нічого не ламає.
       const hook = await tg(env, "setWebhook", {
         url: url.origin + "/webhook",
-        secret_token: env.WEBHOOK_SECRET,
+        secret_token: await hookSecret(env),
         allowed_updates: ["message", "inline_query", "callback_query"],
-        drop_pending_updates: true,
       });
       const cmds = await tg(env, "setMyCommands", {
         commands: [
-          { command: "start", description: "Як шукати позиції ВС" },
-          { command: "help", description: "Приклади запитів" },
+          { command: "start", description: "Про LEX_A" },
+          { command: "help", description: "Як шукати позиції ВС" },
         ],
       });
       let dataInfo;
       try { const d = await loadData(env); dataInfo = d.p.length + " позицій, зріз " + d.e; }
       catch (e) { dataInfo = "дані не завантажено: " + e.message; }
-      return Response.json({ webhook: hook.ok, commands: cmds.ok, data: dataInfo, hook });
+      return Response.json({ webhook: hook.ok, commands: cmds.ok, data: dataInfo, error: hook.ok ? undefined : hook.description });
     }
 
     return new Response("LEX_A bot is running");
