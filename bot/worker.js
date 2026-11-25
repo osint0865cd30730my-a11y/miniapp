@@ -17,8 +17,9 @@ const APP_BASE = "https://osint0865cd30730my-a11y.github.io/miniapp/";
 const APP_VERSION = "3"; // збільшувати після великих оновлень, щоб Telegram не показував стару копію
 const APP_URL = APP_BASE + "?v=" + APP_VERSION;
 const APP_LINK = "https://t.me/lexa_praktyka_bot/praktyka";
-const COVER_URL = APP_BASE + "cover.png";
-const THUMB_URL = APP_BASE + "thumb.png"; // знак «L.» у списку inline-результатів
+// версія в адресі картинок — щоб Telegram і CDN не віддавали стару копію після заміни файлу
+const COVER_URL = APP_BASE + "cover.png?v=" + APP_VERSION;
+const THUMB_URL = APP_BASE + "thumb.png?v=" + APP_VERSION; // знак «L.» у списку inline-результатів
 const DEFAULT_DATA_URL = APP_BASE + "bot.json";
 const EDRSR = "https://reyestr.court.gov.ua/Review/";
 const CHAT_PAGE = 5;
