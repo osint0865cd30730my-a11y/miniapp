@@ -277,7 +277,7 @@ function inlineCard(p) {
     (url ? "\n<a href=\"" + url + "\">Рішення в ЄДРСР</a>" : "");
   const buttons = [];
   if (url) buttons.push({ text: "ЄДРСР ↗", url });
-  buttons.push({ text: "LEX_A", url: appLinkFor(p) });
+  buttons.push({ text: "LEX_K", url: appLinkFor(p) });
   return {
     type: "article",
     id: String(p.i),
@@ -292,7 +292,7 @@ function inlineCard(p) {
 }
 
 const WELCOME =
-  "<b>LEX_A · Практика Верховного Суду</b>\n\n" +
+  "<b>LEX_K · Практика Верховного Суду</b>\n\n" +
   "Правові позиції ККС і Великої Палати ВС з короткими тезами, практика покарань за статтями й областями, " +
   "питання досудового розслідування.\n\n" +
   "<b>Шукайте прямо тут</b> — напишіть статтю, слова або номер справи:\n" +
@@ -314,7 +314,7 @@ const NON_TEXT =
 
 const startKeyboard = () => ({
   inline_keyboard: [
-    [{ text: "Відкрити LEX_A", web_app: { url: APP_URL } }],
+    [{ text: "Відкрити LEX_K", web_app: { url: APP_URL } }],
     [{ text: "Як шукати", callback_data: "help" },
      { text: "Надіслати колезі", switch_inline_query: "" }],
   ],
@@ -352,7 +352,7 @@ async function sendWelcome(env, chatId) {
 const sendHelp = (env, chatId) => tg(env, "sendMessage", {
   chat_id: chatId, text: HELP, parse_mode: "HTML",
   reply_markup: { inline_keyboard: [[{ text: "Спробувати: ст. 111-1", switch_inline_query_current_chat: "ст. 111-1" }],
-    [{ text: "Відкрити LEX_A", web_app: { url: APP_URL } }]] },
+    [{ text: "Відкрити LEX_K", web_app: { url: APP_URL } }]] },
 });
 
 async function onMessage(env, msg) {
@@ -410,7 +410,7 @@ async function onInline(env, iq) {
     next_offset: offset + INLINE_PAGE < list.length ? String(offset + INLINE_PAGE) : "",
   };
   if (q && !list.length) {
-    body.button = { text: "Нічого не знайдено — відкрити LEX_A", web_app: { url: APP_URL } };
+    body.button = { text: "Нічого не знайдено — відкрити LEX_K", web_app: { url: APP_URL } };
   }
   return tg(env, "answerInlineQuery", body);
 }
@@ -446,7 +446,7 @@ export default {
       });
       const cmds = await tg(env, "setMyCommands", {
         commands: [
-          { command: "start", description: "Про LEX_A" },
+          { command: "start", description: "Про LEX_K" },
           { command: "help", description: "Як шукати позиції ВС" },
         ],
       });
@@ -456,6 +456,6 @@ export default {
       return Response.json({ webhook: hook.ok, commands: cmds.ok, data: dataInfo, error: hook.ok ? undefined : hook.description });
     }
 
-    return new Response("LEX_A bot is running");
+    return new Response("LEX_K bot is running");
   },
 };
