@@ -33,6 +33,7 @@ const EDRSR = "https://reyestr.court.gov.ua/Review/";
 const CHAT_PAGE = 5;
 const MAX_SUBS = 10;        // скільки запитів може відстежувати один користувач
 const DIGEST_ITEMS = 8;     // скільки позицій щонайбільше в одному сповіщенні
+const CHECK_MAX = 20;       // скільки номерів справ щонайбільше перевіряти в одному повідомленні
 const INLINE_PAGE = 20;
 
 /* ---------- дані ---------- */
@@ -242,6 +243,7 @@ function meta(p) {
   return [court(p), d[1] && fd(d[1]), d[2] && "справа № " + d[2]].filter(Boolean).join(" · ");
 }
 const mark = p => (p.m === "indented" ? "З відступом від попередньої практики. " : p.m === "modified" ? "Позицію згодом змінено. " : "");
+const pdate = p => ((p.d[0] || [])[1] || p.a || "");
 const edrsr = p => { const d = (p.d[0] || [])[3]; return d ? EDRSR + d : null; };
 const appUrlFor = p => APP_URL + "#pos-" + p.i;           // для кнопки web_app у чаті з ботом
 const appLinkFor = p => APP_LINK + "?startapp=pos-" + p.i; // для посилань в інших чатах
@@ -319,6 +321,7 @@ const WELCOME =
   "<code>ст. 111-1 ч. 5</code> · <code>обшук без ухвали</code> · <code>757/29843/19-к</code>\n\n" +
   "<b>Видно відступи від практики.</b> Позиції, якими ВС відступив від попередніх висновків, і позиції, які згодом змінено, " +
   "позначено, тож застарілу практику не процитуєте. Перелік — кнопкою нижче або запитом <code>відступ</code>.\n\n" +
+  "<b>Перевіряйте посилання.</b> Вставте фрагмент документа з номерами справ — бот скаже, які рішення є в базі, від яких ВС відступив і де не збігається дата.\n\n" +
   "<b>Стежте за темами.</b> Під результатами пошуку натисніть «Стежити за запитом» — нові позиції ВС за ним прийдуть сюди.\n\n" +
   "<b>Надсилайте колегам</b> — в будь-якому чаті наберіть <code>@lexa_praktyka_bot</code> і запит.\n\n" +
   "Повна база — у застосунку.";
@@ -331,6 +334,8 @@ const HELP =
   "<b>Номер позиції:</b> <code>ПП 15734</code>\n" +
   "<b>Відступи:</b> <code>відступ</code> — позиції з відступом від попередньої практики та змінені позиції\n\n" +
   "Якщо назвати КК чи КПК, бот не плутатиме однакові номери статей.\n\n" +
+  "<b>Перевірка посилань:</b> вставте фрагмент скарги чи клопотання з номерами справ (або <code>/check</code> і текст). " +
+  "Бот звірить кожен номер і дату з базою LEX_K. Текст не зберігається; матеріали проваджень не надсилайте.\n\n" +
   "<b>Сповіщення:</b> під результатами — «Стежити за запитом», або напишіть <code>стежити ст. 111-1</code>. " +
   "Раз на день бот надішле нові позиції за вашими запитами. Перелік і скасування — /pidpysky.\n\n" +
   "<b>В іншому чаті:</b> <code>@lexa_praktyka_bot</code> + запит → оберіть позицію, і вона вставиться карткою з посиланням на ЄДРСР.";
@@ -365,6 +370,105 @@ async function hookSecret(env) {
   if (env.WEBHOOK_SECRET) return env.WEBHOOK_SECRET;
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("lexa-webhook:" + env.BOT_TOKEN));
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 48);
+}
+
+/* ---------- перевірка посилань ---------- */
+
+const CASE_RE = /\d{1,4}\/\d{1,6}\/\d{2}(?:-к)?/g;
+const DATE_RE = /(?<!\d)(\d{1,2})\.(\d{1,2})\.(\d{4})(?!\d)/g;
+const toIso = (d, m, y) => y + "-" + String(m).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+
+// Від висновків у яких справах ВС відступив: справа → [позиції з відступом].
+// Джерела: номери справ поруч зі словом «відступ» у тексті позицій «з відступом» і готова карта бази (поле o).
+function depMap(data) {
+  if (data._dep) return data._dep;
+  const m = new Map(), add = (k, p) => { const a = m.get(k) || []; if (!a.includes(p)) a.push(p); m.set(k, a); };
+  for (const p of data.p.filter(p => p.m === "indented")) {
+    const own = new Set(p._cases), re = /відступ/g; let mm;
+    while ((mm = re.exec(p._text))) for (const c of (p._text.slice(mm.index, mm.index + 400).match(CASE_RE) || [])) { const k = caseKey(c); if (!own.has(k)) add(k, p); }
+  }
+  const byId = new Map(data.p.map(p => [p.i, p]));
+  for (const [c, ids] of Object.entries(data.o || {})) {
+    const k = caseKey(c);
+    for (const id of ids) { const q = byId.get(id); if (q && q.m === "indented" && !q._cases.includes(k)) add(k, q); }
+  }
+  data._dep = m;
+  return m;
+}
+function caseCount(data) {
+  if (!data._ncases) data._ncases = new Set(data.p.flatMap(p => p.d.map(d => d[2]).filter(Boolean).map(caseKey))).size;
+  return data._ncases;
+}
+// Коли текст варто перевіряти, а не шукати: явна команда, кілька номерів справ або довгий фрагмент із номером.
+function isCheckRequest(text) {
+  if (/^\/check\b|^перевір/i.test(text)) return true;
+  const n = new Set((text.match(CASE_RE) || []).map(caseKey)).size;
+  return n >= 2 || (n >= 1 && text.length >= 200);
+}
+
+function checkRefs(data, text) {
+  const dep = depMap(data), found = [], seen = new Set();
+  for (const m of text.matchAll(CASE_RE)) {
+    const k = caseKey(m[0]);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    // дата поруч із номером: шукаємо в 120 знаках до номера й 60 після, беремо найближчу
+    const from = Math.max(0, m.index - 120), to = Math.min(text.length, m.index + m[0].length + 60);
+    let date = null, best = 1e9;
+    for (const d of text.slice(from, to).matchAll(DATE_RE)) {
+      const pos = from + d.index, dist = pos < m.index ? m.index - pos : pos - m.index;
+      if (dist < best) { best = dist; date = toIso(d[1], d[2], d[3]); }
+    }
+    const ps = data.p.filter(p => p._cases.includes(k));
+    const dates = [...new Set(data.p.flatMap(p => p.d.filter(d => d[2] && caseKey(d[2]) === k).map(d => d[1])))].sort();
+    found.push({ no: m[0], k, date, ps, dates, dep: (dep.get(k) || []).filter(q => !ps.includes(q)) });
+    if (found.length >= CHECK_MAX) break;
+  }
+  return found;
+}
+
+function checkAnswer(data, text) {
+  const rows = checkRefs(data, text);
+  if (!rows.length) {
+    return { text: "У тексті не знайдено номерів справ. Надішліть фрагмент, де посилання виглядають як <code>постанова ВС від 07.04.2025 у справі № 349/508/16-к</code>.",
+      markup: { inline_keyboard: [] } };
+  }
+  const n = { ok: 0, dep: 0, date: 0, none: 0 }, items = [], links = [];
+  rows.forEach((r, i) => {
+    const lines = [];
+    if (r.dep.length) {
+      n.dep++;
+      lines.push("<b>ВС відступив від висновку в цій справі</b>: " + r.dep.map(q => "позиція № " + q.i + " (" + court(q) + (pdate(q) ? ", " + fd(pdate(q)) : "") + ")").join("; "));
+    }
+    if (r.ps.length) {
+      n.ok++;
+      const p = r.ps[0];
+      lines.push("<b>Є в базі</b>: позиція № " + p.i + " · " + esc(meta(p)) + (r.ps.length > 1 ? " · позицій у цій справі: " + r.ps.length : "") +
+        (p.m === "indented" ? " · ухвалена з відступом" : p.m === "modified" ? " · <b>позначена зміненою</b>" : "") +
+        "\n<i>" + esc(cut(p.h || p.t, 200)) + "</i>");
+      if (edrsr(p) && links.length < 6) links.push({ text: "№ " + p.i + " · ЄДРСР ↗", url: edrsr(p) });
+    }
+    if (r.date && r.dates.length && !r.dates.includes(r.date)) {
+      n.date++;
+      lines.push("<b>Звірте дату</b>: у тексті " + fd(r.date) + ", а в базі рішення в цій справі від " + r.dates.map(fd).join(", ") + ".");
+    }
+    if (!r.ps.length && !r.dep.length) {
+      n.none++;
+      lines.push("<b>Немає в базі LEX_K</b>. Це не означає, що рішення не існує: звірте номер і дату в ЄДРСР.");
+    }
+    items.push("<b>" + (i + 1) + ". № " + esc(r.no) + "</b>" + (r.date ? " · " + fd(r.date) : "") + "\n" + lines.join("\n"));
+  });
+  const head = "<b>Перевірка посилань</b> · номерів справ: " + rows.length +
+    (rows.length >= CHECK_MAX ? " (перевірено перші " + CHECK_MAX + ")" : "") + "\n" +
+    ["є в базі — " + n.ok, n.dep ? "ВС відступив — " + n.dep : "", n.date ? "дата не збігається — " + n.date : "", "немає в базі — " + n.none].filter(Boolean).join(" · ");
+  const foot = "<i>Бот звіряє номери справ і дати лише з базою правових позицій LEX_K (справ у базі: " + caseCount(data) + "). " +
+    "Існування рішення в ЄДРСР він не гарантує: «немає в базі» трапляється й для справжніх рішень. Надісланий текст не зберігається.</i>";
+  let body = head + "\n\n" + items.join("\n\n") + "\n\n" + foot;
+  if (body.length > 4000) body = body.slice(0, 3990) + "…";
+  const kb = [];
+  for (let i = 0; i < links.length; i += 2) kb.push(links.slice(i, i + 2));
+  kb.push([{ text: "Відкрити LEX_K", web_app: { url: APP_URL } }]);
+  return { text: body, markup: { inline_keyboard: kb } };
 }
 
 /* ---------- сповіщення ---------- */
@@ -541,7 +645,19 @@ async function onMessage(env, msg) {
   if (/^\/(pidpysky|subs)\b/.test(text)) return sendSubs(env, msg.chat.id);
   const fm = /^стежити\s*[:—-]?\s*(.*)$/is.exec(text);
   if (fm) return follow(env, msg.chat.id, fm[1]);
-  if (text.startsWith("/")) return sendHelp(env, msg.chat.id);
+  if (isCheckRequest(text)) {
+    const body = text.replace(/^\/check(@\w+)?\s*/i, "");
+    if (!body.trim() || (!CASE_RE.test(body) && /^\/check/i.test(text))) {
+      CASE_RE.lastIndex = 0;
+      return tg(env, "sendMessage", { chat_id: msg.chat.id, parse_mode: "HTML",
+        text: "Надішліть фрагмент скарги чи клопотання з посиланнями на рішення ВС — одним повідомленням. Бот звірить кожен номер справи й дату з базою LEX_K.\n\nМатеріали проваджень і персональні дані не надсилайте." });
+    }
+    CASE_RE.lastIndex = 0;
+    await tg(env, "sendChatAction", { chat_id: msg.chat.id, action: "typing" });
+    const a = checkAnswer(await loadData(env), body);
+    return tg(env, "sendMessage", { chat_id: msg.chat.id, text: a.text, parse_mode: "HTML", link_preview_options: { is_disabled: true }, reply_markup: a.markup });
+  }
+  if (text.startsWith("/") && !/^\/check\b/i.test(text)) return sendHelp(env, msg.chat.id);
   await tg(env, "sendChatAction", { chat_id: msg.chat.id, action: "typing" });
   const data = await loadData(env);
   const q = text.slice(0, 120);
@@ -649,6 +765,7 @@ export default {
         commands: [
           { command: "start", description: "Про LEX_K" },
           { command: "help", description: "Як шукати позиції ВС" },
+          { command: "check", description: "Перевірити посилання на рішення ВС" },
           { command: "pidpysky", description: "Сповіщення: мої запити" },
         ],
       });

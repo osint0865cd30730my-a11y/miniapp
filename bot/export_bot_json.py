@@ -45,7 +45,8 @@ def export(index_path, out_path=None) -> Path:
     index_path = Path(index_path)
     out_path = Path(out_path) if out_path else index_path.with_name("bot.json")
     data = load_data(index_path)
-    payload = {"v": 1, "e": data.get("e"), "p": [compact(p) for p in data["p"]]}
+    # o — карта бази «справа → позиції, пов'язані з відступом від висновку в ній» (для перевірки посилань у боті)
+    payload = {"v": 1, "e": data.get("e"), "p": [compact(p) for p in data["p"]], "o": data.get("o") or {}}
     out_path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     return out_path
 

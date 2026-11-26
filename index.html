@@ -346,6 +346,15 @@ function examples(p,i,n){
     h+='<div class="pad" style="padding-top:8px;padding-bottom:10px;font-size:13px"><div style="color:var(--hint)">Умовний приклад · ухвала апеляційного суду · '+d+' округ · '+demoDate(r)+'</div><div style="margin-top:4px">'+q+'</div></div>'; }
   return h;
 }
+// Абзац для клопотання чи скарги: суд, вид і дата рішення, справа, текст позиції в лапках, посилання на ЄДРСР
+function forMotion(p){
+  const d=p.d[0]||[], kind={"Постанова":"у постанові","Ухвала":"в ухвалі","Рішення":"у рішенні"}[d[0]]||"у постанові";
+  const who=p.c==="ВП"?"Велика Палата Верховного Суду":"Верховний Суд у складі Касаційного кримінального суду";
+  let q=String(p.x||p.t||"").replace(/\s+/g," ").trim();
+  if(q.length>650){ const ss=q.match(/[^.!?]+[.!?]+(\s|$)/g)||[q]; let t=""; for(const x of ss){ if((t+x).length>650&&t) break; t+=x; } q=t.trim()+(t.trim().length<q.length?" …":""); }
+  q=q.replace(/[.\s]+$/,"");
+  return who+" "+kind+(d[1]?" від "+fd(d[1]):"")+(d[2]?" у справі № "+d[2]:"")+(p.c==="ВП"?" сформулювала":" сформулював")+" правовий висновок: «"+q+"»"+(d[3]?" (https://reyestr.court.gov.ua/Review/"+d[3]+")":"")+".";
+}
 function cite(p){ const d=p.d[0]||[]; return (d[0]||"Постанова").toLowerCase()+" "+court(p)+(d[1]?" від "+fd(d[1]):"")+(d[2]?" у справі № "+d[2]:"")+" (ПП "+p.i+")"; }
 function vPos(id){
   const p=P(id), long=p.x.length>700, open=S.full[p.i]||!long;
@@ -361,7 +370,8 @@ function vPos(id){
    '<div class="row"><span class="main t" style="font-size:15px">Суд</span><span class="v">'+court(p)+'</span></div>'+(p.a?'<div class="row"><span class="main t" style="font-size:15px">Додано до бази ВС</span><span class="v">'+fd(p.a)+'</span></div>':'')+'</div>'+
    (p.r.length?'<div class="chips">'+p.r.map(a=>'<button class="chip" data-a="byart" data-v="'+a+'">'+a+'</button>').join("")+'</div>':'')+
    '<div class="btns"><button class="btn'+(S.follow[p.i]?" ghost":"")+'" data-a="follow" data-v="'+p.i+'">'+(S.follow[p.i]?"Стежу":"Стежити")+'</button><button class="btn ghost" data-a="copy" data-v="'+p.i+'">Копіювати посилання</button></div>'+
-   '<div class="group">'+tgRow("pp_"+p.i,"Сповіщення в Telegram","Бот повідомить, якщо в базі з’явиться позначка про відступ чи зміну цієї позиції")+'</div>'+
+   '<div class="group"><button class="row" data-a="motion" data-v="'+p.i+'"><span class="main"><span class="t" style="font-size:15px">Скопіювати для клопотання</span><div class="s">Абзац із судом, датою, справою, текстом позиції в лапках і посиланням на ЄДРСР</div></span><span class="chev">⧉</span></button>'+tgRow("pp_"+p.i,"Сповіщення в Telegram","Бот повідомить, якщо в базі з’явиться позначка про відступ чи зміну цієї позиції")+'</div>'+
+   (S.motion&&S.motion.i===p.i?'<div class="group"><div class="pad"><div class="s" style="margin-bottom:6px">Буфер обміну недоступний — виділіть і скопіюйте вручну:</div><p class="body" style="user-select:text">'+esc(S.motion.t)+'</p></div></div>':'')+
    applyBlock(p);
   return h+'</div>';
 }
@@ -594,9 +604,10 @@ function vCheck(){
      let h="";
      if(c.over) h+='<button class="row" data-a="pos" data-v="'+c.over[0]+'"><span class="main"><span class="t">№ '+esc(c.no)+'</span><div class="s">Верховний Суд відступив від висновку в цій справі: позиція № '+c.over.join(", № ")+'</div></span><span class="badge b-bad">Відступ</span></button>';
      if(c.ps.length) h+='<button class="row" data-a="pos" data-v="'+c.ps[0].i+'"><span class="main"><span class="t">№ '+esc(c.no)+'</span><div class="s">'+court(c.ps[0])+' · '+fd(c.ps[0].d[0][1])+' · позицій у базі: '+c.ps.length+'</div></span>'+(mBadge(c.ps[0])||'<span class="badge b-ok">Є в базі</span>')+'</button>';
+     if(c.date&&c.dates&&c.dates.length&&!c.dates.includes(c.date)) h+='<div class="row"><span class="main"><span class="t">№ '+esc(c.no)+'</span><div class="s">У тексті дата '+fd(c.date)+', а в базі рішення в цій справі від '+c.dates.map(fd).join(", ")+'. Звірте реквізити.</div></span><span class="badge b-warn">Звірте дату</span></div>';
      if(!c.over&&!c.ps.length) h+='<div class="row"><span class="main"><span class="t">№ '+esc(c.no)+'</span><div class="s">У базі такої справи немає. Це не означає, що постанови не існує: звірте реквізити в ЄДРСР.</div></span><span class="badge b-mute">Немає в базі</span></div>';
      return h; }).join(""):'<div class="pad" style="font-size:14px;color:var(--hint)">Номерів справ у тексті не знайдено.</div>')+'</div>'; }
-  return header("Перевірка посилань",true)+'<div class="wrap"><p class="note" style="margin-top:0">Вставте фрагмент із посиланнями на постанови ВС. Перевірка виконується на вашому пристрої, текст нікуди не надсилається. Не вставляйте матеріали проваджень.</p>'+
+  return header("Перевірка посилань",true)+'<div class="wrap"><p class="note" style="margin-top:0">Вставте фрагмент із посиланнями на постанови ВС. Застосунок звірить кожен номер справи й дату з базою та покаже відступи. Перевірка виконується на вашому пристрої, текст нікуди не надсилається. Не вставляйте матеріали проваджень. Те саме вміє бот: надішліть йому фрагмент або /check.</p>'+
    '<textarea class="ta" id="doc" aria-label="Текст для перевірки">'+esc(S.docText??D.s)+'</textarea><div class="btns"><button class="btn" data-a="runcheck">Перевірити</button></div>'+res+
    '<p class="note">Номер справи є лише в частини позицій бази ('+caseIdx.size+' справ), тому «немає в базі» трапляється й для справжніх постанов.</p></div>';
 }
@@ -759,10 +770,21 @@ document.addEventListener("click",e=>{
   else if(a==="segv"){ const st=S.stacks[S.tab]; while(st.length>1) st.pop(); if(v==="vaks") push("vaksv"); else if(SOON[v]) push("soonv",v); else render(); }
   else if(a==="tglink"){ const url=BOT_LINK+"?start="+encodeURIComponent(v), W=window.Telegram&&window.Telegram.WebApp;
     if(W&&W.openTelegramLink&&W.initData) W.openTelegramLink(url); else window.open(url,"_blank","noopener"); }
+  else if(a==="motion"){ const txt=forMotion(P(v)), done=()=>toast("Скопійовано. Текст позиції — з Бази правових позицій ВС: перед поданням звірте з рішенням.");
+    const manual=()=>{ S.motion={i:+v,t:txt}; render(true); };
+    try{ navigator.clipboard.writeText(txt).then(done,manual); }catch(_){ manual(); } }
   else if(a==="copy"){ const txt=cite(P(v)), done=()=>toast("Скопійовано: "+txt);
     try{ navigator.clipboard.writeText(txt).then(done,()=>toast(txt)); }catch(_){ toast(txt); } }
   else if(a==="runcheck"){ const txt=$("doc").value; S.docText=txt; const seen=new Set(), out=[];
-    for(const m of txt.matchAll(/№\s*(\d+\/\d+\/\d+(?:-[а-яіїєa-z]+)?)/gi)){ const k=nc(m[1]); if(seen.has(k)) continue; seen.add(k); out.push({no:m[1],ps:caseIdx.get(k)||[],over:OVER[k]}); }
+    const iso=(d,m,y)=>y+"-"+String(m).padStart(2,"0")+"-"+String(d).padStart(2,"0");
+    for(const m of txt.matchAll(/(\d{1,4}\/\d{1,6}\/\d{2}(?:-к)?)(?![\d\/])/gi)){ const raw=m[1], k0=nc(raw).replace(/-к$/,""); if(seen.has(k0)) continue; seen.add(k0);
+      const ps=caseIdx.get(nc(raw))||caseIdx.get(k0)||caseIdx.get(k0+"-к")||[];
+      const ov=[...new Set([...(OVER[raw]||OVER[k0]||OVER[k0+"-к"]||[]),...(depCase(raw)?[depCase(raw).i]:[])])].filter(i=>{const q=P(i); return q&&q.m==="indented"&&!ps.includes(q);});
+      // дата поруч із номером (до 120 знаків перед ним і 60 після) — найближча
+      const from=Math.max(0,m.index-120), to=Math.min(txt.length,m.index+raw.length+60); let date=null,best=1e9;
+      for(const dm of txt.slice(from,to).matchAll(/(?<!\d)(\d{1,2})\.(\d{1,2})\.(\d{4})(?!\d)/g)){ const pos=from+dm.index, dist=Math.abs(pos-m.index); if(dist<best){best=dist; date=iso(dm[1],dm[2],dm[3]);} }
+      const dates=[...new Set(POS.flatMap(q=>q.d.filter(d=>d[2]&&nc(d[2]).replace(/-к$/,"")===k0).map(d=>d[1])))].sort();
+      out.push({no:raw,ps,over:ov.length?ov:null,date,dates}); }
     S.check=out; render(true); }
 });
 document.addEventListener("input",e=>{ if(e.target.id==="q"){ S.q=e.target.value; $("results").innerHTML=resultsHTML(); } });
