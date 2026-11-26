@@ -146,8 +146,17 @@ function partTextRe(n, part) {
 
 /* ---------- пошук ---------- */
 
+// «відступ», «відступи», «з відступом», «змінені» — позиції з позначками бази LPD: спершу з відступом, далі змінені; новіші вище
+const MARK_Q = /^(з\s+)?(відступ\S*|змінен\S*)$/;
+const markOrder = p => (p.m === "indented" ? 0 : 1);
+
 function search(data, q) {
   const pq = parseQuery(q);
+  if (MARK_Q.test(pq.text)) {
+    const list = data.p.filter(p => p.m === "indented" || p.m === "modified")
+      .sort((a, b) => markOrder(a) - markOrder(b) || (b._date > a._date ? 1 : b._date < a._date ? -1 : 0));
+    return { pq, list };
+  }
   if (pq.ids.length) {
     return { pq, list: data.p.filter(p => pq.ids.includes(p.i)) };
   }
@@ -298,6 +307,8 @@ const WELCOME =
   "питання досудового розслідування.\n\n" +
   "<b>Шукайте прямо тут</b> — напишіть статтю, слова або номер справи:\n" +
   "<code>ст. 111-1 ч. 5</code> · <code>обшук без ухвали</code> · <code>757/29843/19-к</code>\n\n" +
+  "<b>Видно відступи від практики.</b> Позиції, якими ВС відступив від попередніх висновків, і позиції, які згодом змінено, " +
+  "позначено, тож застарілу практику не процитуєте. Перелік — кнопкою нижче або запитом <code>відступ</code>.\n\n" +
   "<b>Надсилайте колегам</b> — в будь-якому чаті наберіть <code>@lexa_praktyka_bot</code> і запит.\n\n" +
   "Повна база — у застосунку.";
 
@@ -306,7 +317,8 @@ const HELP =
   "<b>Стаття і частина:</b> <code>ст. 111 ч. 2</code>, <code>ч. 5 ст. 111-1</code>, <code>ст. 290 КПК</code>\n" +
   "<b>Слова:</b> <code>обшук без ухвали</code>, <code>заочне провадження</code>, <code>438 командир</code>\n" +
   "<b>Номер справи:</b> <code>757/29843/19-к</code>\n" +
-  "<b>Номер позиції:</b> <code>ПП 15734</code>\n\n" +
+  "<b>Номер позиції:</b> <code>ПП 15734</code>\n" +
+  "<b>Відступи:</b> <code>відступ</code> — позиції з відступом від попередньої практики та змінені позиції\n\n" +
   "Якщо назвати КК чи КПК, бот не плутатиме однакові номери статей.\n\n" +
   "<b>В іншому чаті:</b> <code>@lexa_praktyka_bot</code> + запит → оберіть позицію, і вона вставиться карткою з посиланням на ЄДРСР.";
 
@@ -318,6 +330,7 @@ const startKeyboard = () => ({
     [{ text: "Відкрити LEX_K", web_app: { url: APP_URL } }],
     [{ text: "Як шукати", callback_data: "help" },
      { text: "Надіслати колезі", switch_inline_query: "" }],
+    [{ text: "Позиції з відступом", callback_data: "marks" }],
   ],
 });
 
@@ -379,6 +392,15 @@ async function onCallback(env, cq) {
   if (cq.data === "help" && cq.message) {
     await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
     return sendHelp(env, cq.message.chat.id);
+  }
+  if (cq.data === "marks" && cq.message) {
+    const data = await loadData(env);
+    const a = chatAnswer("відступ", search(data, "відступ"), 0);
+    await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
+    return tg(env, "sendMessage", {
+      chat_id: cq.message.chat.id, text: a.text, parse_mode: "HTML",
+      link_preview_options: { is_disabled: true }, reply_markup: a.markup,
+    });
   }
   const m = /^more:(\d+):(.*)$/s.exec(cq.data || "");
   if (!m || !cq.message) return tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
