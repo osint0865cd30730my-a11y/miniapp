@@ -7,6 +7,14 @@
  *   WEBHOOK_SECRET  необов'язково; без нього секрет вебхука виводиться з токена
  *   DATA_URL        необов'язково; за замовчуванням bot.json поряд із застосунком
  *
+ * Прив'язки (Settings → Bindings):
+ *   SUBS            KV-сховище для сповіщень (підписки на запити й переглянуті позиції).
+ *                   Без нього бот працює як раніше, лише без кнопки «Стежити за запитом».
+ *
+ * Розклад (Settings → Trigger events → Cron): раз на день, наприклад «0 7 * * *» (09:00 за Києвом
+ * взимку). Бот порівнює bot.json з тим, що вже бачив, і надсилає підписникам нові позиції
+ * та нові позначки відступу за їхніми запитами.
+ *
  * Маршрути:
  *   POST /webhook          оновлення від Telegram (перевіряється секретний заголовок)
  *   GET  /setup            підключає вебхук до цього воркера й задає команди
@@ -23,6 +31,8 @@ const THUMB_URL = APP_BASE + "thumb.png?v=" + APP_VERSION; // знак «L.» у
 const DEFAULT_DATA_URL = APP_BASE + "bot.json";
 const EDRSR = "https://reyestr.court.gov.ua/Review/";
 const CHAT_PAGE = 5;
+const MAX_SUBS = 10;        // скільки запитів може відстежувати один користувач
+const DIGEST_ITEMS = 8;     // скільки позицій щонайбільше в одному сповіщенні
 const INLINE_PAGE = 20;
 
 /* ---------- дані ---------- */
@@ -309,6 +319,7 @@ const WELCOME =
   "<code>ст. 111-1 ч. 5</code> · <code>обшук без ухвали</code> · <code>757/29843/19-к</code>\n\n" +
   "<b>Видно відступи від практики.</b> Позиції, якими ВС відступив від попередніх висновків, і позиції, які згодом змінено, " +
   "позначено, тож застарілу практику не процитуєте. Перелік — кнопкою нижче або запитом <code>відступ</code>.\n\n" +
+  "<b>Стежте за темами.</b> Під результатами пошуку натисніть «Стежити за запитом» — нові позиції ВС за ним прийдуть сюди.\n\n" +
   "<b>Надсилайте колегам</b> — в будь-якому чаті наберіть <code>@lexa_praktyka_bot</code> і запит.\n\n" +
   "Повна база — у застосунку.";
 
@@ -320,6 +331,8 @@ const HELP =
   "<b>Номер позиції:</b> <code>ПП 15734</code>\n" +
   "<b>Відступи:</b> <code>відступ</code> — позиції з відступом від попередньої практики та змінені позиції\n\n" +
   "Якщо назвати КК чи КПК, бот не плутатиме однакові номери статей.\n\n" +
+  "<b>Сповіщення:</b> під результатами — «Стежити за запитом», або напишіть <code>стежити ст. 111-1</code>. " +
+  "Раз на день бот надішле нові позиції за вашими запитами. Перелік і скасування — /pidpysky.\n\n" +
   "<b>В іншому чаті:</b> <code>@lexa_praktyka_bot</code> + запит → оберіть позицію, і вона вставиться карткою з посиланням на ЄДРСР.";
 
 const NON_TEXT =
@@ -354,6 +367,145 @@ async function hookSecret(env) {
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 48);
 }
 
+/* ---------- сповіщення ---------- */
+
+const subKey = chatId => "sub:" + chatId;
+const normQ = q => String(q || "").replace(/\s+/g, " ").trim().slice(0, 120);
+async function getSubs(env, chatId) { return (await env.SUBS.get(subKey(chatId), "json")) || []; }
+async function putSubs(env, chatId, list) {
+  if (list.length) await env.SUBS.put(subKey(chatId), JSON.stringify(list));
+  else await env.SUBS.delete(subKey(chatId));
+}
+const NO_SUBS_STORE = "Сповіщення ще не ввімкнено на сервері бота. Пошук працює як завжди.";
+
+// Що бот уже бачив: {номер позиції: позначка}. Новим вважається те, чого тут немає, або позиція з новою позначкою.
+const seenMap = data => Object.fromEntries(data.p.map(p => [p.i, p.m || ""]));
+async function ensureSeen(env, data) {
+  if (!(await env.SUBS.get("seen"))) await env.SUBS.put("seen", JSON.stringify(seenMap(data)));
+}
+
+async function follow(env, chatId, q) {
+  q = normQ(q);
+  if (!env.SUBS) return tg(env, "sendMessage", { chat_id: chatId, text: NO_SUBS_STORE });
+  if (!q) return tg(env, "sendMessage", { chat_id: chatId, text: "Напишіть, за чим стежити, наприклад: стежити ст. 111-1" });
+  const list = await getSubs(env, chatId);
+  if (list.some(x => norm(x) === norm(q))) {
+    return tg(env, "sendMessage", { chat_id: chatId, text: "Ви вже стежите за запитом «" + esc(q) + "». Перелік — /pidpysky.", parse_mode: "HTML" });
+  }
+  if (list.length >= MAX_SUBS) {
+    return tg(env, "sendMessage", { chat_id: chatId, text: "Можна стежити щонайбільше за " + MAX_SUBS + " запитами. Приберіть зайвий у /pidpysky.", parse_mode: "HTML" });
+  }
+  list.push(q);
+  await putSubs(env, chatId, list);
+  const data = await loadData(env);
+  await ensureSeen(env, data); // щоб перша розсилка не надіслала всю базу
+  const one = /^пп\s*(\d+)$/i.exec(q) && data.p.find(p => "ПП " + p.i === q.toUpperCase().replace(/\s+/, " "));
+  if (one) return tg(env, "sendMessage", {
+    chat_id: chatId, parse_mode: "HTML",
+    text: "Стежу за позицією № " + one.i + ":\n<i>" + esc(cut(one.h || one.t, 300)) + "</i>\n\nЯкщо в базі LEX_K з'явиться позначка про її зміну " +
+      "або нова позиція ВС з відступом від висновку в цій справі, надішлю сюди (перевірка раз на день).\n\nУсі ваші запити — /pidpysky.",
+  });
+  return tg(env, "sendMessage", {
+    chat_id: chatId, parse_mode: "HTML",
+    text: "Стежу за запитом «" + esc(q) + "». Щойно в базі LEX_K з'являться нові позиції ВС за ним або нові позначки відступу, " +
+      "надішлю їх сюди (перевірка раз на день).\n\nУсі ваші запити — /pidpysky.",
+  });
+}
+
+function subsView(list) {
+  if (!list.length) {
+    return { text: "Ви ще ні за чим не стежите. Знайдіть позиції, наприклад <code>ст. 111-1</code>, і натисніть «Стежити за запитом» під результатами.",
+      markup: { inline_keyboard: [] } };
+  }
+  return {
+    text: "<b>Ви стежите за запитами</b>\n\n" + list.map((q, i) => (i + 1) + ". " + esc(q)).join("\n") +
+      "\n\nНові позиції за ними приходять раз на день. Натисніть на запит, щоб перестати стежити.",
+    markup: { inline_keyboard: list.map((q, i) => [{ text: "✕ " + cut(q, 40), callback_data: "u:" + i }]) },
+  };
+}
+async function sendSubs(env, chatId) {
+  if (!env.SUBS) return tg(env, "sendMessage", { chat_id: chatId, text: NO_SUBS_STORE });
+  const v = subsView(await getSubs(env, chatId));
+  return tg(env, "sendMessage", { chat_id: chatId, text: v.text, parse_mode: "HTML", reply_markup: v.markup });
+}
+
+// Кнопка «Стежити за запитом» під відповіддю (лише перша сторінка; запит бот бере з тексту відповіді)
+function withFollow(env, a) {
+  if (env.SUBS) a.markup.inline_keyboard.push([{ text: "Стежити за запитом", callback_data: "f" }]);
+  return a;
+}
+
+// Щоденна розсилка. Повертає короткий звіт (для журналу воркера).
+async function digest(env) {
+  if (!env.SUBS) return { skipped: "немає SUBS" };
+  DATA = null; // свіжі дані, без кешу воркера
+  const data = await loadData(env);
+  const seen = await env.SUBS.get("seen", "json");
+  if (!seen) { await env.SUBS.put("seen", JSON.stringify(seenMap(data))); return { init: data.p.length }; }
+  const fresh = data.p.filter(p => !(p.i in seen) || (p.m && seen[p.i] !== p.m));
+  await env.SUBS.put("seen", JSON.stringify(seenMap(data)));
+  if (!fresh.length) return { fresh: 0 };
+  const sub = { e: data.e, p: fresh };
+  // нові позиції «з відступом»: від висновків у яких справах відступили (номери справ поруч зі словом «відступ»)
+  const dep = new Map(), cre = /\d{1,4}\/\d{1,6}\/\d{2}(?:-к)?/g;
+  for (const p of fresh.filter(p => p.m === "indented")) {
+    const own = new Set(p._cases), txt = p._text, re = /відступ/g; let m;
+    while ((m = re.exec(txt))) for (const c of (txt.slice(m.index, m.index + 400).match(cre) || [])) {
+      const k = caseKey(c); if (!own.has(k) && !dep.has(k)) dep.set(k, p);
+    }
+  }
+  const byId = new Map(data.p.map(p => [p.i, p]));
+  // для запиту «ПП N»: нова позиція, якою ВС відступив від висновку в справі позиції N
+  const departures = q => { const ids = parseQuery(q).ids, out = [];
+    for (const id of ids) { const old = byId.get(id); if (old) for (const c of old._cases) { const np = dep.get(c); if (np && np.i !== id && !out.includes(np)) out.push(np); } }
+    return out; };
+  let cursor, sent = 0, removed = 0;
+  do {
+    const page = await env.SUBS.list({ prefix: "sub:", cursor });
+    for (const k of page.keys) {
+      const chatId = k.name.slice(4), qs = (await env.SUBS.get(k.name, "json")) || [];
+      const hits = [], seenIds = new Set();
+      for (const q of qs) {
+        const list = [...new Set([...search(sub, q).list, ...departures(q)])].filter(p => !seenIds.has(p.i));
+        list.forEach(p => seenIds.add(p.i));
+        if (list.length) hits.push([q, list]);
+      }
+      if (!hits.length) continue;
+      const r = await tg(env, "sendMessage", { chat_id: chatId, ...digestMessage(hits, data.e) });
+      if (r.ok) sent++;
+      else if (r.error_code === 403) { await env.SUBS.delete(k.name); removed++; } // користувач зупинив бота
+    }
+    cursor = page.list_complete ? null : page.cursor;
+  } while (cursor);
+  return { fresh: fresh.length, sent, removed };
+}
+
+function digestMessage(hits, cutDate) {
+  const total = hits.reduce((n, h) => n + h[1].length, 0);
+  let shown = 0, k = 0;
+  const parts = [], links = [];
+  for (const [q, list] of hits) {
+    const take = list.slice(0, Math.max(0, DIGEST_ITEMS - shown));
+    let block = "<b>За запитом «" + esc(q) + "»</b>" + (list.length > take.length ? " — " + list.length + ", показано " + take.length : "");
+    for (const p of take) {
+      k++;
+      block += "\n<b>" + k + ".</b> " + esc(cut(p.h || p.t, 300)) + "\n<i>" + esc(mark(p) + meta(p)) + "</i>";
+      if (edrsr(p) && links.length < 6) links.push({ text: k + " · ЄДРСР ↗", url: edrsr(p) });
+    }
+    shown += take.length;
+    parts.push(block);
+    if (shown >= DIGEST_ITEMS) break;
+  }
+  const head = "<b>Нове в базі LEX_K</b>" + (cutDate ? " · зріз " + fd(cutDate) : "") + "\n" +
+    total + " " + plural(total, "позиція", "позиції", "позицій") + " за вашими запитами";
+  let text = head + "\n\n" + parts.join("\n\n") + "\n\nКерувати сповіщеннями — /pidpysky.";
+  if (text.length > 4000) text = text.slice(0, 3990) + "…";
+  const kb = [];
+  for (let i = 0; i < links.length; i += 3) kb.push(links.slice(i, i + 3));
+  kb.push([{ text: "Відкрити LEX_K", web_app: { url: APP_URL } }]);
+  return { text, parse_mode: "HTML", link_preview_options: { is_disabled: true }, reply_markup: { inline_keyboard: kb } };
+}
+
 async function sendWelcome(env, chatId) {
   const r = await tg(env, "sendPhoto", {
     chat_id: chatId, photo: COVER_URL, caption: WELCOME, parse_mode: "HTML", reply_markup: startKeyboard(),
@@ -375,13 +527,25 @@ async function onMessage(env, msg) {
     return tg(env, "sendMessage", { chat_id: msg.chat.id, text: NON_TEXT, parse_mode: "HTML" });
   }
   const text = msg.text.trim();
-  if (/^\/start\b/.test(text)) return sendWelcome(env, msg.chat.id);
+  const st = /^\/start(?:\s+(\S+))?/.exec(text);
+  if (st) {
+    // параметри з застосунку: vidstup — стежити за відступами; pp_<номер> — за позицією; subs — мої запити
+    const arg = st[1] || "";
+    if (arg === "vidstup") return follow(env, msg.chat.id, "відступ");
+    if (arg === "subs") return sendSubs(env, msg.chat.id);
+    const pp = /^pp_(\d{2,6})$/.exec(arg);
+    if (pp) return follow(env, msg.chat.id, "ПП " + pp[1]);
+    return sendWelcome(env, msg.chat.id);
+  }
   if (/^\/help\b/.test(text)) return sendHelp(env, msg.chat.id);
+  if (/^\/(pidpysky|subs)\b/.test(text)) return sendSubs(env, msg.chat.id);
+  const fm = /^стежити\s*[:—-]?\s*(.*)$/is.exec(text);
+  if (fm) return follow(env, msg.chat.id, fm[1]);
   if (text.startsWith("/")) return sendHelp(env, msg.chat.id);
   await tg(env, "sendChatAction", { chat_id: msg.chat.id, action: "typing" });
   const data = await loadData(env);
   const q = text.slice(0, 120);
-  const a = chatAnswer(q, search(data, q), 0);
+  const a = withFollow(env, chatAnswer(q, search(data, q), 0));
   return tg(env, "sendMessage", {
     chat_id: msg.chat.id, text: a.text, parse_mode: "HTML",
     link_preview_options: { is_disabled: true }, reply_markup: a.markup,
@@ -395,12 +559,26 @@ async function onCallback(env, cq) {
   }
   if (cq.data === "marks" && cq.message) {
     const data = await loadData(env);
-    const a = chatAnswer("відступ", search(data, "відступ"), 0);
+    const a = withFollow(env, chatAnswer("відступ", search(data, "відступ"), 0));
     await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
     return tg(env, "sendMessage", {
       chat_id: cq.message.chat.id, text: a.text, parse_mode: "HTML",
       link_preview_options: { is_disabled: true }, reply_markup: a.markup,
     });
+  }
+  if (cq.data === "f" && cq.message) {
+    const q = (/[Зз]а запитом «([^»]+)»/.exec(cq.message.text || "") || [])[1];
+    await tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: q ? "Стежу за «" + cut(q, 40) + "»" : "" });
+    return q ? follow(env, cq.message.chat.id, q) : null;
+  }
+  const um = /^u:(\d+)$/.exec(cq.data || "");
+  if (um && cq.message && env.SUBS) {
+    const chatId = cq.message.chat.id, list = await getSubs(env, chatId), i = +um[1];
+    const gone = list[i];
+    if (gone !== undefined) { list.splice(i, 1); await putSubs(env, chatId, list); }
+    await tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: gone !== undefined ? "Більше не стежу за «" + cut(gone, 40) + "»" : "" });
+    const v = subsView(list);
+    return tg(env, "editMessageText", { chat_id: chatId, message_id: cq.message.message_id, text: v.text, parse_mode: "HTML", reply_markup: v.markup });
   }
   const m = /^more:(\d+):(.*)$/s.exec(cq.data || "");
   if (!m || !cq.message) return tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
@@ -471,14 +649,20 @@ export default {
         commands: [
           { command: "start", description: "Про LEX_K" },
           { command: "help", description: "Як шукати позиції ВС" },
+          { command: "pidpysky", description: "Сповіщення: мої запити" },
         ],
       });
       let dataInfo;
       try { const d = await loadData(env); dataInfo = d.p.length + " позицій, зріз " + d.e; }
       catch (e) { dataInfo = "дані не завантажено: " + e.message; }
-      return Response.json({ webhook: hook.ok, commands: cmds.ok, data: dataInfo, error: hook.ok ? undefined : hook.description });
+      return Response.json({ webhook: hook.ok, commands: cmds.ok, data: dataInfo, notifications: !!env.SUBS, error: hook.ok ? undefined : hook.description });
     }
 
     return new Response("LEX_K bot is running");
+  },
+
+  // Cron (Settings → Trigger events): щоденна розсилка нових позицій підписникам
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(digest(env).then(r => console.log("digest " + JSON.stringify(r)), e => console.log("digest failed: " + (e && e.stack || e))));
   },
 };

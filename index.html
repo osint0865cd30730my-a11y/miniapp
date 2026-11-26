@@ -361,6 +361,7 @@ function vPos(id){
    '<div class="row"><span class="main t" style="font-size:15px">Суд</span><span class="v">'+court(p)+'</span></div>'+(p.a?'<div class="row"><span class="main t" style="font-size:15px">Додано до бази ВС</span><span class="v">'+fd(p.a)+'</span></div>':'')+'</div>'+
    (p.r.length?'<div class="chips">'+p.r.map(a=>'<button class="chip" data-a="byart" data-v="'+a+'">'+a+'</button>').join("")+'</div>':'')+
    '<div class="btns"><button class="btn'+(S.follow[p.i]?" ghost":"")+'" data-a="follow" data-v="'+p.i+'">'+(S.follow[p.i]?"Стежу":"Стежити")+'</button><button class="btn ghost" data-a="copy" data-v="'+p.i+'">Копіювати посилання</button></div>'+
+   '<div class="group">'+tgRow("pp_"+p.i,"Сповіщення в Telegram","Бот повідомить, якщо в базі з’явиться позначка про відступ чи зміну цієї позиції")+'</div>'+
    applyBlock(p);
   return h+'</div>';
 }
@@ -574,13 +575,16 @@ function vPre(id){
 }
 
 /* ===== Стежу, перевірка, про дані ===== */
+// Сповіщення надсилає бот: кнопка відкриває його з готовою підпискою (/start <параметр>)
+const BOT_LINK = "https://t.me/lexa_praktyka_bot";
+const tgRow = (param,title,sub) => '<button class="row" data-a="tglink" data-v="'+esc(param)+'"><span class="main"><span class="t" style="font-size:15px">'+title+'</span>'+(sub?'<div class="s">'+sub+'</div>':'')+'</span><span class="chev">↗</span></button>';
 function sw(key,on){ return '<button class="sw" role="switch" aria-checked="'+!!on+'" data-a="sub" data-v="'+key+'" aria-label="Перемкнути"></button>'; }
 function vMore(){
   const fl=Object.keys(S.follow).filter(k=>S.follow[k]&&P(k));
   return header("Стежу та інструменти")+'<div class="wrap">'+instBlock()+'<div class="sh">Мої підписки</div><div class="group">'+
-   (fl.length?fl.map(k=>posRow(P(k))).join(""):'<div class="pad" style="font-size:14px;color:var(--hint)">Ви ще не стежите за жодною позицією. Відкрийте позицію й натисніть «Стежити»: повідомимо про відступ чи зміну.</div>')+'</div>'+
-   '<div class="sh">Сповіщення</div><div class="group"><div class="row"><span class="main"><span class="t">Відступи від позицій</span><div class="s">Одразу після оновлення бази</div></span>'+sw("vidstup",S.subs.vidstup)+'</div><div class="row"><span class="main"><span class="t">Щотижневий дайджест</span><div class="s">Нові позиції за обраними статтями</div></span>'+sw("digest",S.subs.digest)+'</div><div class="row"><span class="main"><span class="t">Надсилати в Telegram</span><div class="s">Лише посилання на публічні рішення</div></span>'+sw("bot",S.subs.bot)+'</div></div>'+
-   '<p class="note">У прототипі сповіщення не надсилаються: перемикачі показують майбутні налаштування.</p>'+
+   (fl.length?fl.map(k=>posRow(P(k))).join(""):'<div class="pad" style="font-size:14px;color:var(--hint)">Ви ще не зберегли жодної позиції. Відкрийте позицію й натисніть «Стежити», щоб мати її тут; сповіщення про її зміну — кнопкою «Сповіщення в Telegram» на картці.</div>')+'</div>'+
+   '<div class="sh">Сповіщення в Telegram</div><div class="group">'+tgRow("vidstup","Нові відступи від позицій ВС","Бот повідомить, щойно в базі з’явиться позиція з відступом або позначка про зміну")+tgRow("subs","Мої запити в боті","Перелік і скасування сповіщень")+'</div>'+
+   '<p class="note">Бот @lexa_praktyka_bot раз на день перевіряє оновлення бази й надсилає нові позиції ВС за вашими запитами. Стежити можна за будь-яким пошуком у боті (кнопка «Стежити за запитом») або за окремою позицією — кнопкою на її картці.</p>'+
    '<div class="sh">Інструменти</div><div class="group"><button class="row" data-a="go" data-v="check"><span class="main"><span class="t">Перевірка посилань у документі</span><div class="s">Звіряє номери справ із базою та знаходить відступи</div></span><span class="chev">›</span></button></div>'+
    '<div class="sh">Довіра</div><div class="group"><button class="row" data-a="go" data-v="about"><span class="main"><span class="t">Про дані й методологію</span><div class="s">Зріз '+CUT+'</div></span><span class="chev">›</span></button></div></div>';
 }
@@ -753,6 +757,8 @@ document.addEventListener("click",e=>{
   else if(a==="per"){ S.per=v; const st=S.stacks[S.tab]; while(st.length>1) st.pop(); S.sv=null; S.pg={}; const g=(v==="pre"&&GSP)?GSP:GS; if(S.reg!=="*"&&!g.reg[S.reg]) S.reg="*"; if(S.reg2&&!g.reg[S.reg2]) S.reg2=""; render(); }
   else if(a==="rinst"){ S.rinst=v; const st=S.stacks[S.tab]; while(st.length>1) st.pop(); S.sv=null; S.pg={}; render(); }
   else if(a==="segv"){ const st=S.stacks[S.tab]; while(st.length>1) st.pop(); if(v==="vaks") push("vaksv"); else if(SOON[v]) push("soonv",v); else render(); }
+  else if(a==="tglink"){ const url=BOT_LINK+"?start="+encodeURIComponent(v), W=window.Telegram&&window.Telegram.WebApp;
+    if(W&&W.openTelegramLink&&W.initData) W.openTelegramLink(url); else window.open(url,"_blank","noopener"); }
   else if(a==="copy"){ const txt=cite(P(v)), done=()=>toast("Скопійовано: "+txt);
     try{ navigator.clipboard.writeText(txt).then(done,()=>toast(txt)); }catch(_){ toast(txt); } }
   else if(a==="runcheck"){ const txt=$("doc").value; S.docText=txt; const seen=new Set(), out=[];
