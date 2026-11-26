@@ -750,14 +750,20 @@ async function ensureMenu(env, chatId) {
   if (!env.SUBS || await env.SUBS.get("kb:" + chatId)) return;
   await sendMenu(env, chatId, "<b>Нове в LEX_K:</b> " + MENU_NOTE);
 }
-// Підказка з полем відповіді (ForceReply): відповідь на неї бот обробить як пошук чи як перевірку
-const ask = (env, chatId, kind) => tg(env, "sendMessage", {
+// Підказка після кнопки «Пошук» / «Перевірити посилання». Обраний режим бот пам'ятає 15 хв (KV mode:<chat>), і наступне
+// повідомлення обробляє саме так. Меню внизу лишається (ForceReply його ховав би). Без KV — підказка з полем відповіді.
+async function ask(env, chatId, kind) {
+  if (env.SUBS) await env.SUBS.put("mode:" + chatId, kind, { expirationTtl: 900 });
+  return askMsg(env, chatId, kind, !env.SUBS);
+}
+const askMsg = (env, chatId, kind, force) => tg(env, "sendMessage", {
   chat_id: chatId, parse_mode: "HTML",
   text: kind === "check"
     ? ASK_CHECK + "\nВставте одним повідомленням фрагмент документа з номерами справ ВС — бот звірить кожен номер і дату з базою LEX_K.\n\n" +
       "Матеріали проваджень і персональні дані не надсилайте: досить абзаців із посиланнями."
     : ASK_SEARCH + "\nНапишіть статтю, 2–3 слова або номер справи. Наприклад: <code>ч. 5 ст. 111-1</code>, <code>обшук без ухвали</code>, <code>757/29843/19-к</code>.",
-  reply_markup: { force_reply: true, input_field_placeholder: kind === "check" ? "Вставте фрагмент із номерами справ" : "ст. 111-1 ч. 5 · обшук без ухвали" },
+  reply_markup: Object.assign(force ? { force_reply: true } : menuKeyboard(),
+    { input_field_placeholder: kind === "check" ? "Вставте фрагмент із номерами справ" : "ст. 111-1 ч. 5 · обшук без ухвали" }),
 });
 async function runSearch(env, chatId, q) {
   await tg(env, "sendChatAction", { chat_id: chatId, action: "typing" });
@@ -799,8 +805,13 @@ async function onMessage(env, msg) {
   await ensureMenu(env, msg.chat.id);
   // відповідь на підказку «Пошук» / «Перевірка посилань» — робимо саме те, що обрано
   const rt = msg.reply_to_message && msg.reply_to_message.from && msg.reply_to_message.from.is_bot ? msg.reply_to_message.text || "" : "";
-  if (rt.startsWith(ASK_CHECK)) return runCheck(env, msg.chat.id, text);
-  if (rt.startsWith(ASK_SEARCH)) return runSearch(env, msg.chat.id, text);
+  let mode = rt.startsWith(ASK_CHECK) ? "check" : rt.startsWith(ASK_SEARCH) ? "search" : "";
+  if (env.SUBS && !text.startsWith("/")) {
+    const m = await env.SUBS.get("mode:" + msg.chat.id);
+    if (m) { await env.SUBS.delete("mode:" + msg.chat.id); mode = mode || m; }
+  }
+  if (mode === "check") return runCheck(env, msg.chat.id, text);
+  if (mode === "search") return runSearch(env, msg.chat.id, text);
   const fm = /^стежити\s*[:—-]?\s*(.*)$/is.exec(text);
   if (fm) return follow(env, msg.chat.id, fm[1]);
   if (isCheckRequest(text)) {
