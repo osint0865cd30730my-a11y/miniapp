@@ -4,4 +4,12 @@
 
 Джерела: відкриті дані ДСА (ЄДРСР, ліцензія CC BY), правові позиції ВС (lpd.court.gov.ua). Розбір вироків автоматичний — перед цитуванням звіряйте з текстом рішення. Статистики за суддями немає.
 
-Збирається з бази знань LEX_A (`build_lexa.py`); не редагуйте `index.html` вручну. Фірмовий стиль накладається після збірки скриптом бази `OUTPUTS/tools/apply_brand.py` (стиль — `OUTPUTS/tools/lexa_brand.css`).
+## Звідки береться `index.html`
+
+Код застосунку — лише в цьому репозиторії, у теці `src/`; дані — у `data.json`. `index.html` (GitHub Pages / Telegram), `bot.json` і файл для артефакту LEX_K збирає `tools/build.py`. Руками `index.html` не редагуйте.
+
+- Змінили код у `src/` → `python3 tools/build.py`.
+- Оновили дані в базі знань LEX_A (`build_lexa.py`, `apply_brand.py`) → `python3 tools/build.py --data-from зібраний.html`: скрипт візьме лише дані, а код лишить з `src/`. Якщо код у зібраній копії інший, він зупиниться й покаже різницю в `dist/code-diff.txt`, щоб правки з різних чатів не затирали одна одну.
+- `python3 tools/build.py --check` — перевірка, що `index.html` зібрано з `src/` і `data.json`. Те саме автоматично перевіряє GitHub після кожного коміту (вкладка Actions).
+
+Докладний порядок — у `CLAUDE.md`.
