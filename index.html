@@ -331,7 +331,15 @@ function resultsHTML(){
     '<div class="sh">Практика судів</div><div class="group">'+[["sentencing","Практика покарань",D.g.verdicts+" вироків за підслідністю СБУ з "+D.g.from+", за частинами статей і областями",""],["regions","Практика за регіонами","На які постанови ВС посилаються суди області",""],["pretrial","Досудове розслідування","Питання досудового розслідування: що вирішив ВС і чого не вирішував",""]].map(x=>'<button class="row" data-a="tabgo" data-v="'+x[0]+'"><span class="main"><span class="t" style="color:var(--link)">'+x[1]+'</span><div class="s">'+x[2]+'</div></span>'+x[3]+'<span class="chev">›</span></button>').join("")+'</div>'+
     '<p class="note">Тексти позицій — з бази правових позицій Верховного Суду, тези — з бази LEX_K. Кожна позиція має посилання на рішення в ЄДРСР.</p>';
 }
-function vPositionsHome(){ return header("Позиції Верховного Суду")+'<div class="wrap">'+(S.inst==="nabu"?'<div class="alert a-info" style="margin-top:0"><b>Для НАБУ / САП</b>Позиції ВС в антикорупційних справах зібрано в окремий каталог, він одразу нижче.</div><button class="row" data-a="topic" data-v="koruptsiini-zlochyny-pozytsii-vs" style="margin-bottom:10px;border-radius:12px;background:var(--card)"><span class="main"><span class="t">Корупційні та службові злочини: позиції ВС</span><div class="s">Ст. 191, 364, 366, 368, 369, 369-2 КК та суміжні</div></span><span class="chev">›</span></button>':'')+'<input class="search" id="q" type="search" placeholder="Пошук: стаття, слово, номер справи" value="'+esc(S.q)+'" autocomplete="off">'+
+// Плашка вгорі «Позицій»: з яким органом досудового розслідування працює користувач (обирається в «Стежу»)
+const INST_NOTE={sbu:["Для СБУ","Злочини проти основ національної безпеки, воєнні злочини, тероризм"],
+  nabu:["Для НАБУ / САП","Позиції ВС в антикорупційних справах"],
+  police:["Для Національної поліції","Загальнокримінальні злочини"],
+  beb:["Для БЕБ","Економічні злочини"],
+  dbr:["Для ДБР","Злочини працівників правоохоронних органів, суддів та інших осіб, визначених ч. 4 ст. 216 КПК"],
+  all:["Для всіх органів","Практика всіх органів досудового розслідування"]};
+function instNote(){ const n=INST_NOTE[S.inst]; return n?'<div class="alert a-info" style="margin-top:0"><b>'+n[0]+'</b>'+n[1]+'</div>':''; }
+function vPositionsHome(){ return header("Позиції Верховного Суду")+'<div class="wrap">'+instNote()+(S.inst==="nabu"?'<button class="row" data-a="topic" data-v="koruptsiini-zlochyny-pozytsii-vs" style="margin-bottom:10px;border-radius:12px;background:var(--card)"><span class="main"><span class="t">Корупційні та службові злочини: позиції ВС</span><div class="s">Ст. 191, 364, 366, 368, 369, 369-2 КК та суміжні</div></span><span class="chev">›</span></button>':'')+'<input class="search" id="q" type="search" placeholder="Пошук: стаття, слово, номер справи" value="'+esc(S.q)+'" autocomplete="off">'+
   '<div class="chips">'+QUICK.map(x=>'<button class="chip" data-a="quick" data-v="'+x+'">'+x+'</button>').join("")+'</div><div id="results" style="display:flex;flex-direction:column;gap:8px">'+resultsHTML()+'</div></div>'; }
 function byDate(list){ return [...list].sort((a,b)=>((b.d[0]||[])[1]||"").localeCompare((a.d[0]||[])[1]||"")); }
 function vTopic(s){ const t=TOP.find(x=>x.s===s), list=byDate(POS.filter(p=>p.o.includes(s)));
