@@ -655,19 +655,25 @@ function render(keep){
   if(!tabs().some(x=>x[0]===S.tab)) S.tab="positions";
   $("app").innerHTML=view(cur());
   $("tabs").innerHTML=tabs().map(x=>'<button class="tab" data-a="tab" data-v="'+x[0]+'"'+(x[0]===S.tab?' aria-current="page"':'')+'><svg viewBox="0 0 24 24" aria-hidden="true"><path d="'+x[2]+'"/></svg>'+x[1]+'</button>').join("");
-  window.scrollTo(0, keep?y:0);
-  if(!keep){ try{ const n=$("tabs"); n.scrollIntoView && n.scrollIntoView({block:"start"}); }catch(_){} }
+  const top=cur(), ry=keep?y:(top.y||0); if(!keep) delete top.y;
+  window.scrollTo(0, ry);
+  if(!keep&&!ry){ try{ const n=$("tabs"); n.scrollIntoView && n.scrollIntoView({block:"start"}); }catch(_){} }
   if(window.__tgSyncBack) window.__tgSyncBack();
 }
-function push(v,p){ S.stacks[S.tab].push({v,p}); S.cls=null; render(); }
+// Прокрутка: перед переходом запам'ятовуємо, де був користувач (поле y запису в стеку), і повертаємо його туди «Назад»
+function saveScroll(){ const st=S.stacks[S.tab]; if(!st||!st.length) return; const d=st.length-1;
+  if(document.body.classList.contains("desk")){ const L=$("plist"), D=$("pdet")||$("psolo"); if(D) st[d].y=D.scrollTop; if(L&&d>0) st[d-1].y=L.scrollTop; }
+  else st[d].y=window.scrollY; }
+function goBack(){ const st=S.stacks[S.tab]; if(st&&st.length>1){ st.pop(); S.cls=null; render(); return true; } return false; }
+function push(v,p){ if(!document.body.classList.contains("desk")) saveScroll(); S.stacks[S.tab].push({v,p}); S.cls=null; render(); }
 let toastT; function toast(m){ const t=$("toast"); t.textContent=m; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true,2600); }
 
 document.addEventListener("click",e=>{
   const b=e.target.closest("[data-a]"); if(!b) return; const a=b.dataset.a, v=b.dataset.v;
-  if(a==="tab"){ if(S.tab===v) S.stacks[v]=[{v:"home"}]; S.tab=v; try{history.replaceState(null,"","#"+v)}catch(_){} render(); }
+  if(a==="tab"){ if(S.tab===v) S.stacks[v]=[{v:"home"}]; else saveScroll(); S.tab=v; try{history.replaceState(null,"","#"+v)}catch(_){} render(); }
   else if(a==="tabgo"){ S.tab=v; S.stacks[v]=[{v:"home"}]; render(); }
   else if(a==="topicgo"){ S.tab="positions"; S.stacks.positions=[{v:"home"},{v:"topic",p:v}]; render(); }
-  else if(a==="back"){ const st=S.stacks[S.tab]; if(st.length>1) st.pop(); S.cls=null; render(); }
+  else if(a==="back"){ goBack(); }
   else if(a==="topic") push("topic",v);
   else if(a==="kas") push("kas",v);
   else if(a==="byart") push("byart",v);
@@ -735,7 +741,7 @@ render();
   apply(); try{ tg.onEvent("themeChanged",apply); }catch(_){}
   const bb=tg.BackButton;
   window.__tgSyncBack=()=>{ try{ const st=S.inst&&S.stacks[S.tab]; (st&&st.length>1)?bb.show():bb.hide(); }catch(_){} };
-  try{ bb.onClick(()=>{ const st=S.stacks[S.tab]; if(st&&st.length>1){ st.pop(); S.cls=null; render(); } }); }catch(_){}
+  try{ bb.onClick(()=>{ goBack(); }); }catch(_){}
   window.__tgSyncBack();
 })();
 
@@ -765,7 +771,7 @@ render();
     if(b){ S.inst=null; save(); render(); }
   }, true);
   const pushBase = push;
-  push = function(v,p){ const st=S.stacks[S.tab]; if(fromList && st.length>1) st.pop(); fromList=false; pushBase(v,p); };
+  push = function(v,p){ if(document.body.classList.contains("desk")) saveScroll(); const st=S.stacks[S.tab]; if(fromList && st.length>1) st.pop(); fromList=false; pushBase(v,p); };
 
   function markSelected(child){
     const L = $("plist"); if(!L) return;
@@ -795,13 +801,15 @@ render();
       const lHTML=view(st[d-1]), dHTML=view(st[d]);   /* картку рахуємо останньою, як і в одноколонковій версії */
       app.className="app split";
       app.innerHTML='<section class="pane plist" id="plist" aria-label="Список">'+lHTML+'</section><section class="pane pdet" id="pdet" aria-label="Картка">'+dHTML+'</section>';
-      $("plist").scrollTop = keep||lk===prevL ? ly : (lk===prevD ? dy : 0);
-      $("pdet").scrollTop = keep||dk===prevD ? dy : 0;
+      const sl=st[d-1].y, sd=st[d].y; if(!keep){ delete st[d-1].y; delete st[d].y; }
+      $("plist").scrollTop = keep||lk===prevL ? ly : (lk===prevD ? dy : (sl||0));
+      $("pdet").scrollTop = keep||dk===prevD ? dy : (dk===prevL ? ly : (sd||0));
       app.dataset.lk=lk; markSelected(st[d]);
     } else {
       app.className="app solo";
       app.innerHTML='<section class="pane psolo" id="psolo">'+view(st[d])+'</section>';
-      $("psolo").scrollTop = keep||dk===prevD ? dy : 0;
+      const sd=st[d].y; if(!keep) delete st[d].y;
+      $("psolo").scrollTop = keep||dk===prevD ? dy : (dk===prevL ? ly : (sd||0));
       app.dataset.lk="";
     }
     app.dataset.dk=dk;
@@ -826,7 +834,7 @@ render();
       if(q){ q.focus(); q.select(); }
     } else if(e.key==="Escape"){
       if(typing){ e.target.blur(); return; }
-      const st=S.stacks[S.tab]; if(st.length>1){ st.pop(); S.cls=null; render(); }
+      goBack();
     }
   });
 
