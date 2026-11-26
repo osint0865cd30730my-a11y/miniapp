@@ -314,8 +314,47 @@ const MARK='<svg class="mk" viewBox="0 0 100 100" aria-hidden="true"><defs><line
 function header(title,back,mock){ return '<header class="hdr'+(back?'':' top')+'">'+(back?'<button class="back" data-a="back" aria-label="Назад">‹ Назад</button>':MARK)+'<h1>'+esc(title)+'</h1>'+(mock?'<span class="demo" title="Числа й приклади на цьому екрані умовні">Макет</span>':'')+'</header>'; }
 function listHTML(list,limit){ const n=limit||60, show=list.slice(0,n);
   return (show.length?'<div class="group">'+show.map(posRow).join("")+'</div>':'')+(list.length>n?'<p class="note">Показано '+n+' із '+list.length+'. Уточніть запит, щоб звузити добірку.</p>':''); }
-function search(q){ const tk=q.toLowerCase().split(/\s+/).filter(Boolean); return POS.filter(p=>tk.every(t=>p._s.includes(t))); }
-const QUICK=["ст. 111-1 КК","ст. 111 КК","тримання під вартою","обшук","НСРД","ст. 290","заочн"];
+function search(q){ const am=/^\s*ст\.?\s*(\d+(?:-\d+)?)\s*кк\s*$/i.exec(q); if(am) return artHit(am[1]);
+  const tk=q.toLowerCase().split(/\s+/).filter(Boolean); return POS.filter(p=>tk.every(t=>p._s.includes(t))); }
+const QUICK_BY={sbu:["ст. 111-1 КК","ст. 111 КК","тримання під вартою","обшук","НСРД","ст. 290","заочн"],
+  nabu:["ст. 368 КК","ст. 191 КК","ст. 364 КК","ст. 369-2 КК","неправомірн","НСРД","обшук"],
+  police:["ст. 190 КК","ст. 185 КК","ст. 286 КК","ст. 307 КК","ст. 263 КК","тримання під вартою","обшук"],
+  beb:["ст. 212 КК","ст. 204 КК","ст. 205-1 КК","ст. 222 КК","арешт майна","тимчасовий доступ","обшук"],
+  dbr:["ст. 407 КК","ст. 365 КК","ст. 364 КК","ст. 366 КК","ст. 425 КК","тримання під вартою","обшук"]};
+const quick=()=>QUICK_BY[S.inst]||QUICK_BY.sbu;
+// Позиції, де згадано статтю КК (поле статей або текст «ст. 190 КК», «ч. 2 ст. 185, 186 КК», «статті 190 КК»)
+const ART_HIT={};
+function artHit(n){ if(ART_HIT[n]) return ART_HIT[n];
+  const e=n.replace("-","\\-"), rx=new RegExp("(?:ст\\.|статт\\S*)\\s*(?:\\d+(?:-\\d+)?(?:,\\s*|\\s+(?:і|та)\\s+))*"+e+"(?![\\d-])[^;]{0,40}?кк");
+  return ART_HIT[n]=POS.filter(p=>p.r.includes("ст. "+n+" КК")||rx.test(p._s)); }
+// Склади злочинів за органом: добірки позицій за статтями КК (рахуються із самої бази)
+const INST_CAT={
+  police:{t:"Загальнокримінальні злочини: позиції ВС",h:"Загальнокримінальні злочини",g:[
+    ["Проти життя та здоров’я",[["115","Умисне вбивство"],["121","Тяжкі тілесні ушкодження"],["122","Середньої тяжкості тілесні ушкодження"],["125","Легкі тілесні ушкодження"],["126-1","Домашнє насильство"]]],
+    ["Проти власності",[["185","Крадіжка"],["186","Грабіж"],["187","Розбій"],["189","Вимагання"],["190","Шахрайство"],["194","Знищення або пошкодження майна"]]],
+    ["Безпека руху",[["286","Порушення ПДР особою, що керує транспортом"],["286-1","Керування в стані сп’яніння"],["289","Незаконне заволодіння транспортним засобом"]]],
+    ["Зброя, наркотики, громадський порядок",[["263","Незаконне поводження зі зброєю"],["296","Хуліганство"],["307","Збут наркотичних засобів"],["309","Наркотики без мети збуту"]]],
+    ["Статеві злочини",[["152","Зґвалтування"],["153","Сексуальне насильство"]]],
+    ["Правосуддя, управління, військовий обов’язок",[["336","Ухилення від призову за мобілізацією"],["342","Опір представникові влади"],["345","Погроза або насильство щодо працівника правоохоронного органу"],["382","Невиконання судового рішення"]]]]},
+  beb:{t:"Економічні злочини: позиції ВС",h:"Економічні злочини",g:[
+    ["Податки та акциз",[["212","Ухилення від сплати податків"],["212-1","Ухилення від сплати ЄСВ"],["204","Підакцизні товари"],["216","Марки акцизного податку"]]],
+    ["Фінанси та гроші",[["199","Підроблені гроші"],["200","Платіжні інструменти"],["209","Легалізація доходів"],["222","Шахрайство з фінансовими ресурсами"],["222-1","Маніпулювання на фондовому ринку"],["218-1","Доведення до банкрутства"],["219","Доведення до банкрутства (до 2020 р.)"]]],
+    ["Фіктивне підприємництво",[["205","Фіктивне підприємництво"],["205-1","Підроблення документів для реєстрації"],["206-2","Протиправне заволодіння майном підприємства"]]],
+    ["Інтелектуальна власність, комерційна таємниця",[["229","Незаконне використання знака"],["231","Комерційна таємниця"],["232","Розголошення комерційної таємниці"]]]]},
+  dbr:{t:"Злочини, які розслідує ДБР: позиції ВС",h:"Справи ДБР",g:[
+    ["Військові злочини",[["402","Непокора"],["405","Погроза або насильство щодо начальника"],["406","Насильство щодо підлеглого"],["407","Самовільне залишення частини"],["408","Дезертирство"],["409","Ухилення від військової служби"],["410","Викрадення зброї військовослужбовцем"],["425","Недбале ставлення до служби"],["426-1","Перевищення влади військовою службовою особою"]]],
+    ["Правоохоронці та судді",[["127","Катування"],["365","Перевищення влади або службових повноважень"],["371","Незаконне затримання"],["372","Притягнення завідомо невинного"],["373","Примушування давати показання"],["374","Порушення права на захист"],["375","Постановлення неправосудного рішення"]]],
+    ["Службові злочини",[["364","Зловживання владою"],["366","Службове підроблення"],["367","Службова недбалість"]]]]},
+};
+function instCatBtn(){ if(S.inst==="nabu") return '<button class="row" data-a="topic" data-v="koruptsiini-zlochyny-pozytsii-vs" style="margin-bottom:10px;border-radius:12px;background:var(--card)"><span class="main"><span class="t">Корупційні та службові злочини: позиції ВС</span><div class="s">Ст. 191, 364, 366, 368, 369, 369-2 КК та суміжні</div></span><span class="chev">›</span></button>';
+  const c=INST_CAT[S.inst]; if(!c) return "";
+  const arts=c.g.flatMap(g=>g[1]).filter(a=>artHit(a[0]).length), n=new Set(arts.flatMap(a=>artHit(a[0]))).size;
+  return '<button class="row" data-a="go" data-v="icat" style="margin-bottom:10px;border-radius:12px;background:var(--card)"><span class="main"><span class="t">'+c.t+'</span><div class="s">Ст. '+[...arts].sort((x,y)=>artHit(y[0]).length-artHit(x[0]).length).slice(0,5).map(a=>a[0]).join(", ")+' КК та інші · позицій: '+n+'</div></span><span class="chev">›</span></button>'; }
+function vInstCat(){ const c=INST_CAT[S.inst]||INST_CAT.police;
+  return header(c.h,true)+'<div class="wrap"><p class="note" style="margin-top:0">Позиції ВС за статтями КК, які найчастіше трапляються в справах органу. Позицію зараховано до статті, якщо статтю названо в її тексті; одна позиція може бути в кількох статтях. База найповніша щодо справ СБУ та корупційних справ, тож за частиною статей позицій поки небагато.</p>'+
+   c.g.map(g=>{ const rows=g[1].filter(a=>artHit(a[0]).length); return rows.length?'<div class="sh">'+g[0]+'</div><div class="group">'+rows.map(a=>'<button class="row" data-a="iart" data-v="'+a[0]+'"><span class="main"><span class="t" style="font-size:15px">ст. '+a[0]+' КК · '+esc(a[1])+'</span></span><span class="v">'+artHit(a[0]).length+'</span><span class="chev">›</span></button>').join("")+'</div>':''; }).join("")+'</div>'; }
+function vInstArt(n){ const a=(INST_CAT[S.inst]?INST_CAT[S.inst].g.flatMap(g=>g[1]):[]).find(x=>x[0]===n), list=byDate(artHit(n));
+  return header("ст. "+n+" КК",true)+'<div class="wrap"><p class="note" style="margin-top:0">'+(a?esc(a[1])+' · ':'')+'позицій: '+list.length+'</p>'+listHTML(list,250)+'</div>'; }
 function topicRows(rub){ return TOP.filter(t=>t.r===rub).map(t=>'<button class="row" data-a="topic" data-v="'+t.s+'"><span class="main"><span class="t" style="font-size:15px">'+esc(t.t)+'</span></span><span class="v">'+t.n+'</span><span class="chev">›</span></button>').join(""); }
 function resultsHTML(){
   const q=S.q.trim();
@@ -339,8 +378,8 @@ const INST_NOTE={sbu:["Для СБУ","Злочини проти основ на
   dbr:["Для ДБР","Злочини працівників правоохоронних органів, суддів та інших осіб, визначених ч. 4 ст. 216 КПК"],
   all:["Для всіх органів","Практика всіх органів досудового розслідування"]};
 function instNote(){ const n=INST_NOTE[S.inst]; return n?'<div class="alert a-info" style="margin-top:0"><b>'+n[0]+'</b>'+n[1]+'</div>':''; }
-function vPositionsHome(){ return header("Позиції Верховного Суду")+'<div class="wrap">'+instNote()+(S.inst==="nabu"?'<button class="row" data-a="topic" data-v="koruptsiini-zlochyny-pozytsii-vs" style="margin-bottom:10px;border-radius:12px;background:var(--card)"><span class="main"><span class="t">Корупційні та службові злочини: позиції ВС</span><div class="s">Ст. 191, 364, 366, 368, 369, 369-2 КК та суміжні</div></span><span class="chev">›</span></button>':'')+'<input class="search" id="q" type="search" placeholder="Пошук: стаття, слово, номер справи" value="'+esc(S.q)+'" autocomplete="off">'+
-  '<div class="chips">'+QUICK.map(x=>'<button class="chip" data-a="quick" data-v="'+x+'">'+x+'</button>').join("")+'</div><div id="results" style="display:flex;flex-direction:column;gap:8px">'+resultsHTML()+'</div></div>'; }
+function vPositionsHome(){ return header("Позиції Верховного Суду")+'<div class="wrap">'+instNote()+instCatBtn()+'<input class="search" id="q" type="search" placeholder="Пошук: стаття, слово, номер справи" value="'+esc(S.q)+'" autocomplete="off">'+
+  '<div class="chips">'+quick().map(x=>'<button class="chip" data-a="quick" data-v="'+x+'">'+x+'</button>').join("")+'</div><div id="results" style="display:flex;flex-direction:column;gap:8px">'+resultsHTML()+'</div></div>'; }
 function byDate(list){ return [...list].sort((a,b)=>((b.d[0]||[])[1]||"").localeCompare((a.d[0]||[])[1]||"")); }
 function vTopic(s){ const t=TOP.find(x=>x.s===s), list=byDate(POS.filter(p=>p.o.includes(s)));
   return header(t.t,true)+'<div class="wrap"><p class="note" style="margin-top:0">'+esc(t.t)+' · позицій: '+list.length+'</p>'+listHTML(list,250)+'</div>'; }
@@ -783,6 +822,8 @@ function view(t){
   G = vctx()?GV:ictx("dbr")?GD:(ictx("beb")&&GB)?GB:(ictx("police")&&GN)?GN:(S.per==="pre"&&GSP)?GSP:GS; if(G===GV){ S.reg="*"; S.reg2=""; }
   if(t.v==="pos") return vPos(t.p);
   if(t.v==="topic") return vTopic(t.p);
+  if(t.v==="icat") return vInstCat();
+  if(t.v==="iart") return vInstArt(t.p);
   if(t.v==="kas") return vKas(t.p);
   if(t.v==="byart") return vByArt(t.p);
   if(t.v==="arts") return vArts();
@@ -834,6 +875,7 @@ document.addEventListener("click",e=>{
   else if(a==="pre") push("pre",v);
   else if(a==="go") push(v);
   else if(a==="quick"){ S.q=v; render(); }
+  else if(a==="iart") push("iart",v);
   else if(a==="full"){ S.full[v]=true; render(true); }
   else if(a==="mode"){ S.mode=v; render(true); }
   else if(a==="posd"){ S.posD=v; S.cls=null; render(true); }
