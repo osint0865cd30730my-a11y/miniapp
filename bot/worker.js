@@ -263,7 +263,9 @@ function chatAnswer(q, res, offset) {
       text: (missNote ? missNote + " " : "") + "За запитом «" + esc(q) + "» позицій у базі немає. Це не означає, що їх немає в практиці ВС: " +
         "перевірте в ЄДРСР або змініть запит.\n\nПриклади: <code>ст. 111-1 ч. 5</code>, <code>обшук без ухвали</code>, " +
         "<code>757/29843/19-к</code>.",
-      markup: { inline_keyboard: [[{ text: "Відкрити застосунок", web_app: { url: APP_URL } }]] },
+      markup: { inline_keyboard: [
+        ...(suggestions(q).length ? suggestions(q).map(x => [{ text: "Спробувати: " + x, callback_data: "ex:s:" + x }]) : []),
+        [{ text: "❓ Як шукати", callback_data: "hn:search" }, { text: "Відкрити застосунок", web_app: { url: APP_URL } }]] },
     };
   }
   const page = list.slice(offset, offset + CHAT_PAGE);
@@ -286,6 +288,7 @@ function chatAnswer(q, res, offset) {
   }
   nav.push({ text: "Відкрити в застосунку", web_app: { url: page.length === 1 ? appUrlFor(page[0]) : APP_URL } });
   kb.push(nav);
+  if (!offset && /^\s*(№\s*)?\d{1,4}\/\d{1,6}\/\d{2}(-к)?\s*$/i.test(q)) kb.push([{ text: "📋 Перевірити як посилання", callback_data: "ck" }]);
   return { text, markup: { inline_keyboard: kb } };
 }
 
@@ -324,21 +327,113 @@ const WELCOME =
   "<b>Перевіряйте посилання.</b> Вставте фрагмент документа з номерами справ — бот скаже, які рішення є в базі, від яких ВС відступив, які передано на ОП чи ВП і де не збігається дата.\n\n" +
   "<b>Стежте за темами.</b> Під результатами пошуку натисніть «Стежити за запитом» — нові позиції ВС за ним прийдуть сюди.\n\n" +
   "<b>Надсилайте колегам</b> — в будь-якому чаті наберіть <code>@lexa_praktyka_bot</code> і запит.\n\n" +
-  "Повна база — у застосунку.";
+  "Меню — кнопками внизу екрана; «❓ Як користуватися» — коротко про все з прикладами. Повна база — у застосунку.";
 
-const HELP =
-  "<b>Як шукати</b>\n\n" +
-  "<b>Стаття і частина:</b> <code>ст. 111 ч. 2</code>, <code>ч. 5 ст. 111-1</code>, <code>ст. 290 КПК</code>\n" +
-  "<b>Слова:</b> <code>обшук без ухвали</code>, <code>заочне провадження</code>, <code>438 командир</code>\n" +
-  "<b>Номер справи:</b> <code>757/29843/19-к</code>\n" +
-  "<b>Номер позиції:</b> <code>ПП 15734</code>\n" +
-  "<b>Відступи:</b> <code>відступ</code> — позиції з відступом від попередньої практики та змінені позиції\n\n" +
-  "Якщо назвати КК чи КПК, бот не плутатиме однакові номери статей.\n\n" +
-  "<b>Перевірка посилань:</b> вставте фрагмент скарги чи клопотання з номерами справ (або <code>/check</code> і текст). " +
-  "Бот звірить кожен номер і дату з базою LEX_K. Текст не зберігається; матеріали проваджень не надсилайте.\n\n" +
-  "<b>Сповіщення:</b> під результатами — «Стежити за запитом», або напишіть <code>стежити ст. 111-1</code>. " +
-  "Раз на день бот надішле нові позиції за вашими запитами. Перелік і скасування — /pidpysky.\n\n" +
-  "<b>В іншому чаті:</b> <code>@lexa_praktyka_bot</code> + запит → оберіть позицію, і вона вставиться карткою з посиланням на ЄДРСР.";
+/* ---------- меню й довідка ---------- */
+
+// Кнопки внизу екрана (reply-клавіатура). Їхній текст приходить звичайним повідомленням.
+const MENU = { search: "🔎 Пошук", check: "📋 Перевірити посилання", subs: "🔔 Мої сповіщення", help: "❓ Як користуватися" };
+const menuKeyboard = () => ({
+  keyboard: [[{ text: MENU.search }, { text: MENU.check }], [{ text: MENU.subs }, { text: MENU.help }]],
+  resize_keyboard: true, is_persistent: true, input_field_placeholder: "Стаття, слова або номер справи",
+});
+const MENU_NOTE = "Меню — кнопками внизу екрана:\n🔎 <b>Пошук</b> · 📋 <b>Перевірити посилання</b> · 🔔 <b>Мої сповіщення</b> · ❓ <b>Як користуватися</b>\n\n" +
+  "Можна й без кнопок: просто напишіть запит.";
+// Зразок для «Спробувати на прикладі»: тут є всі види позначок перевірки
+const CHECK_SAMPLE =
+  "Як зазначив Верховний Суд у постанові від 23.09.2026 у справі № 757/29843/19-к, така ухвала підлягає апеляційному оскарженню. " +
+  "Аналогічні висновки — у постановах ККС ВС від 15.05.2019 у справі № 466/9158/14-к, від 01.12.2025 у справі № 638/18926/23 " +
+  "та від 10.03.2024 у справі № 999/1234/23.";
+
+// Заголовки підказок, на які користувач відповідає (ForceReply): за ними бот знає, що робити з відповіддю
+const ASK_SEARCH = "🔎 Пошук", ASK_CHECK = "📋 Перевірка посилань";
+
+const HELP_SECTIONS = {
+  main: {
+    text: "<b>Як користуватися LEX_K</b>\n\n" +
+      "Оберіть, про що розповісти. Під кожною інструкцією є приклад, який можна запустити одним натиском.\n\n" +
+      "🔎 <b>Пошук</b> — позиції ВС за статтею, словами чи номером справи\n" +
+      "📋 <b>Перевірка посилань</b> — звірка номерів справ і дат у вашому документі\n" +
+      "🔔 <b>Сповіщення</b> — нові позиції за вашими темами раз на день\n" +
+      "🏷 <b>Позначки</b> — що означають «з відступом», «передано на ОП/ВП» та інші\n" +
+      "📤 <b>Надіслати колезі</b> — як вставити позицію в будь-який чат",
+    kb: [[{ text: "🔎 Пошук", callback_data: "h:search" }, { text: "📋 Перевірка посилань", callback_data: "h:check" }],
+      [{ text: "🔔 Сповіщення", callback_data: "h:subs" }, { text: "🏷 Позначки", callback_data: "h:marks" }],
+      [{ text: "📤 Надіслати колезі", callback_data: "h:share" }],
+      [{ text: "Відкрити LEX_K", web_app: { url: APP_URL } }]],
+  },
+  search: {
+    text: "<b>🔎 Пошук</b>\n\n" +
+      "Пишіть коротко, як у пошуковику, а не реченням.\n\n" +
+      "<b>Стаття і частина:</b> <code>ч. 5 ст. 111-1</code>, <code>ст. 438</code>, <code>ст. 290 КПК</code>\n" +
+      "Додайте КК чи КПК, якщо номер статті є в обох кодексах.\n" +
+      "<b>2–3 ключові слова:</b> <code>обшук без ухвали</code>, <code>заочне провадження</code>\n" +
+      "<b>Стаття і слово:</b> <code>438 командир</code>\n" +
+      "<b>Номер справи:</b> <code>757/29843/19-к</code>\n" +
+      "<b>Номер позиції:</b> <code>ПП 15734</code>\n" +
+      "<b>Відступи:</b> <code>відступ</code>\n\n" +
+      "<b>Погано працює:</b> довге питання («чи можна визнати недопустимим доказ, якщо…»). Бот шукає слова, а не зміст: " +
+      "виберіть із питання 2–3 головні слова. Якщо якогось слова в базі немає, бот скаже про це й покаже позиції за рештою запиту.\n\n" +
+      "Натисніть приклад — бот виконає запит:",
+    kb: [[{ text: "ч. 5 ст. 111-1", callback_data: "ex:s:ч. 5 ст. 111-1" }, { text: "обшук без ухвали", callback_data: "ex:s:обшук без ухвали" }],
+      [{ text: "757/29843/19-к", callback_data: "ex:s:757/29843/19-к" }, { text: "відступ", callback_data: "ex:s:відступ" }],
+      [{ text: "‹ Зміст", callback_data: "h:main" }]],
+  },
+  check: {
+    text: "<b>📋 Перевірка посилань</b>\n\n" +
+      "Натисніть «📋 Перевірити посилання» внизу й вставте <b>одним повідомленням</b> фрагмент скарги, клопотання чи процесуального рішення " +
+      "з посиланнями на постанови ВС. Номер справи — у звичному вигляді (<code>№ 349/508/16-к</code>), дата — поруч із ним (<code>від 07.04.2025</code>).\n\n" +
+      "По кожній справі бот скаже:\n" +
+      "• <b>Є в базі</b> — номер позиції й коротка теза;\n" +
+      "• <b>ВС відступив від висновку в цій справі</b> — є новіша позиція, прочитайте її;\n" +
+      "• <b>Передано на ОП/ВП</b> — висновок у цій справі пропонують переглянути, рішення ще немає;\n" +
+      "• <b>Звірте дату</b> — дата у вашому тексті не збігається з датою рішення в базі;\n" +
+      "• <b>Немає в базі LEX_K</b> — звірте номер у ЄДРСР (рішення може існувати).\n\n" +
+      "До 20 номерів за раз. Текст не зберігається, але матеріали проваджень і персональні дані не надсилайте: досить абзаців із посиланнями.\n\n" +
+      "Без кнопки бот теж перевіряє, якщо в тексті два й більше номерів справ або довгий фрагмент. Один короткий номер він шукає.",
+    kb: [[{ text: "Спробувати на прикладі", callback_data: "ex:c" }],
+      [{ text: "‹ Зміст", callback_data: "h:main" }]],
+  },
+  subs: {
+    text: "<b>🔔 Сповіщення</b>\n\n" +
+      "Знайдіть позиції за темою й натисніть «Стежити за запитом» під результатами. Або напишіть: <code>стежити ч. 5 ст. 111-1</code>.\n\n" +
+      "Раз на день, близько 9:00, бот надішле нові позиції ВС за вашими запитами й нові позначки відступу. Якщо нового немає, бот мовчить. " +
+      "Запитів — до " + MAX_SUBS + ". Перелік і скасування — «🔔 Мої сповіщення» внизу.\n\n" +
+      "У застосунку на картці позиції є «Стежити за позицією»: бот напише, якщо її змінять або ВС від неї відступить.",
+    kb: [[{ text: "Стежити за відступами ВС", callback_data: "ex:f:відступ" }],
+      [{ text: "🔔 Мої сповіщення", callback_data: "subs" }, { text: "‹ Зміст", callback_data: "h:main" }]],
+  },
+  marks: {
+    text: "<b>🏷 Позначки</b>\n\n" +
+      "<b>З відступом</b> — цією позицією ВС відступив від попереднього висновку.\n\n" +
+      "<b>Змінена</b> — у базі ВС є позначка про подальшу зміну позиції.\n\n" +
+      "<b>ВС відступив від висновку в цій справі</b> — пізніша позиція з відступом посилається на цю справу. Перш ніж цитувати, прочитайте нову.\n\n" +
+      "<b>Передано на ОП/ВП</b> — ККС передав питання на об’єднану палату чи Велику Палату, найчастіше щоб відступити від висновку в цій справі. Рішення ще немає.\n\n" +
+      "<b>Звірте дату</b> — дата біля номера справи у вашому тексті не збігається з датою рішення в базі.\n\n" +
+      "<b>Немає в базі LEX_K</b> — такої справи в базі немає. Це не означає, що рішення не існує: звірте в ЄДРСР.",
+    kb: [[{ text: "Позиції з відступом", callback_data: "marks" }],
+      [{ text: "‹ Зміст", callback_data: "h:main" }]],
+  },
+  share: {
+    text: "<b>📤 Надіслати колезі</b>\n\n" +
+      "У будь-якому чаті Telegram наберіть <code>@lexa_praktyka_bot</code>, пробіл і запит — з'явиться список позицій. " +
+      "Натисніть потрібну: у чат вставиться картка з тезою, текстом позиції й посиланням на ЄДРСР. Колезі нічого встановлювати не треба.",
+    kb: [[{ text: "Спробувати", switch_inline_query: "ч. 5 ст. 111-1" }],
+      [{ text: "‹ Зміст", callback_data: "h:main" }]],
+  },
+};
+const helpView = sec => HELP_SECTIONS[sec] || HELP_SECTIONS.main;
+
+// Підказки, коли нічого не знайдено: коротший запит, стаття з кодексом
+function suggestions(q) {
+  const out = [], words = q.split(/\s+/).filter(Boolean);
+  const num = words.find(w => /^\d{2,3}(-\d)?$/.test(w)); // однозначні числа — швидше частини, ніж статті
+  if (num && !/ст/i.test(q)) out.push("ст. " + num + " КК", "ст. " + num + " КПК");
+  const key = words.filter(w => w.length > 3 && !STOP.has(w.toLowerCase()) && !/^\d/.test(w));
+  if (words.length > 3 && key.length >= 2) out.push(key.slice(0, 2).join(" "));
+  if (words.length > 3 && key.length >= 3) out.push(key.slice(0, 3).join(" "));
+  return [...new Set(out)].filter(x => x.toLowerCase() !== q.toLowerCase() && new TextEncoder().encode("ex:s:" + x).length <= 64).slice(0, 3);
+}
 
 const NON_TEXT =
   "Я шукаю позиції Верховного Суду за текстом. Напишіть статтю, слова або номер справи, наприклад <code>ст. 111-1 ч. 5</code>.";
@@ -346,7 +441,7 @@ const NON_TEXT =
 const startKeyboard = () => ({
   inline_keyboard: [
     [{ text: "Відкрити LEX_K", web_app: { url: APP_URL } }],
-    [{ text: "Як шукати", callback_data: "help" },
+    [{ text: "❓ Як користуватися", callback_data: "help" },
      { text: "Надіслати колезі", switch_inline_query: "" }],
     [{ text: "Позиції з відступом", callback_data: "marks" }],
   ],
@@ -428,13 +523,14 @@ function checkRefs(data, text) {
     const k = caseKey(m[0]);
     if (seen.has(k)) continue;
     seen.add(k);
-    // дата поруч із номером: шукаємо в 120 знаках до номера й 60 після, беремо найближчу
-    const from = Math.max(0, m.index - 120), to = Math.min(text.length, m.index + m[0].length + 60);
-    let date = null, best = 1e9;
-    for (const d of text.slice(from, to).matchAll(DATE_RE)) {
-      const pos = from + d.index, dist = pos < m.index ? m.index - pos : pos - m.index;
-      if (dist < best) { best = dist; date = toIso(d[1], d[2], d[3]); }
-    }
+    // дата поруч із номером: зазвичай перед ним («від 07.04.2025 у справі № …») — остання дата в 120 знаках до номера,
+    // але не далі за попередній номер справи; якщо там немає — перша дата в 60 знаках після, не далі за наступний номер
+    const nums = [...text.matchAll(CASE_RE)].map(x => x.index);
+    const prev = Math.max(-1, ...nums.filter(i => i < m.index)), next = Math.min(text.length, ...nums.filter(i => i > m.index));
+    const before = text.slice(Math.max(0, m.index - 120, prev < 0 ? 0 : prev + 1), m.index);
+    const after = text.slice(m.index + m[0].length, Math.min(m.index + m[0].length + 60, next));
+    const db = [...before.matchAll(DATE_RE)].pop(), da = after.match(new RegExp(DATE_RE.source));
+    const dd = db || da, date = dd ? toIso(dd[1], dd[2], dd[3]) : null;
     const ps = data.p.filter(p => p._cases.includes(k));
     const dates = [...new Set(data.p.flatMap(p => p.d.filter(d => d[2] && caseKey(d[2]) === k).map(d => d[1])))].sort();
     found.push({ no: m[0], k, date, ps, dates, dep: (dep.get(k) || []).filter(q => !ps.includes(q)), refs: refs.get(k) || [] });
@@ -540,7 +636,7 @@ async function follow(env, chatId, q) {
 
 function subsView(list) {
   if (!list.length) {
-    return { text: "Ви ще ні за чим не стежите. Знайдіть позиції, наприклад <code>ст. 111-1</code>, і натисніть «Стежити за запитом» під результатами.",
+    return { text: "Ви ще ні за чим не стежите. Знайдіть позиції, наприклад <code>ст. 111-1</code>, і натисніть «Стежити за запитом» під результатами. Або напишіть: <code>стежити ст. 111-1</code>.",
       markup: { inline_keyboard: [] } };
   }
   return {
@@ -641,11 +737,39 @@ async function sendWelcome(env, chatId) {
   return tg(env, "sendMessage", { chat_id: chatId, text: WELCOME, parse_mode: "HTML", reply_markup: startKeyboard() });
 }
 
-const sendHelp = (env, chatId) => tg(env, "sendMessage", {
-  chat_id: chatId, text: HELP, parse_mode: "HTML",
-  reply_markup: { inline_keyboard: [[{ text: "Спробувати: ст. 111-1", switch_inline_query_current_chat: "ст. 111-1" }],
-    [{ text: "Відкрити LEX_K", web_app: { url: APP_URL } }]] },
+const sendHelp = (env, chatId, sec = "main") => {
+  const v = helpView(sec);
+  return tg(env, "sendMessage", { chat_id: chatId, text: v.text, parse_mode: "HTML", link_preview_options: { is_disabled: true }, reply_markup: { inline_keyboard: v.kb } });
+};
+// Клавіатуру внизу показуємо один раз кожному: новим — після привітання, наявним — з першим повідомленням після оновлення
+async function sendMenu(env, chatId, text) {
+  await tg(env, "sendMessage", { chat_id: chatId, text, parse_mode: "HTML", reply_markup: menuKeyboard() });
+  if (env.SUBS) await env.SUBS.put("kb:" + chatId, "1");
+}
+async function ensureMenu(env, chatId) {
+  if (!env.SUBS || await env.SUBS.get("kb:" + chatId)) return;
+  await sendMenu(env, chatId, "<b>Нове в LEX_K:</b> " + MENU_NOTE);
+}
+// Підказка з полем відповіді (ForceReply): відповідь на неї бот обробить як пошук чи як перевірку
+const ask = (env, chatId, kind) => tg(env, "sendMessage", {
+  chat_id: chatId, parse_mode: "HTML",
+  text: kind === "check"
+    ? ASK_CHECK + "\nВставте одним повідомленням фрагмент документа з номерами справ ВС — бот звірить кожен номер і дату з базою LEX_K.\n\n" +
+      "Матеріали проваджень і персональні дані не надсилайте: досить абзаців із посиланнями."
+    : ASK_SEARCH + "\nНапишіть статтю, 2–3 слова або номер справи. Наприклад: <code>ч. 5 ст. 111-1</code>, <code>обшук без ухвали</code>, <code>757/29843/19-к</code>.",
+  reply_markup: { force_reply: true, input_field_placeholder: kind === "check" ? "Вставте фрагмент із номерами справ" : "ст. 111-1 ч. 5 · обшук без ухвали" },
 });
+async function runSearch(env, chatId, q) {
+  await tg(env, "sendChatAction", { chat_id: chatId, action: "typing" });
+  q = q.slice(0, 120);
+  const a = withFollow(env, chatAnswer(q, search(await loadData(env), q), 0));
+  return tg(env, "sendMessage", { chat_id: chatId, text: a.text, parse_mode: "HTML", link_preview_options: { is_disabled: true }, reply_markup: a.markup });
+}
+async function runCheck(env, chatId, body, prefix = "") {
+  await tg(env, "sendChatAction", { chat_id: chatId, action: "typing" });
+  const a = checkAnswer(await loadData(env), body);
+  return tg(env, "sendMessage", { chat_id: chatId, text: prefix + a.text, parse_mode: "HTML", link_preview_options: { is_disabled: true }, reply_markup: a.markup });
+}
 
 async function onMessage(env, msg) {
   if (msg.chat.type !== "private") return; // у групах працює лише inline-режим
@@ -661,10 +785,22 @@ async function onMessage(env, msg) {
     if (arg === "subs") return sendSubs(env, msg.chat.id);
     const pp = /^pp_(\d{2,6})$/.exec(arg);
     if (pp) return follow(env, msg.chat.id, "ПП " + pp[1]);
-    return sendWelcome(env, msg.chat.id);
+    await sendWelcome(env, msg.chat.id);
+    return sendMenu(env, msg.chat.id, MENU_NOTE);
   }
   if (/^\/help\b/.test(text)) return sendHelp(env, msg.chat.id);
   if (/^\/(pidpysky|subs)\b/.test(text)) return sendSubs(env, msg.chat.id);
+  // кнопки внизу екрана
+  const btn = text.replace(/^[^\p{L}]+/u, "").toLowerCase();
+  if (btn === "пошук") return ask(env, msg.chat.id, "search");
+  if (btn === "перевірити посилання") return ask(env, msg.chat.id, "check");
+  if (btn === "мої сповіщення") return sendSubs(env, msg.chat.id);
+  if (btn === "як користуватися") return sendHelp(env, msg.chat.id);
+  await ensureMenu(env, msg.chat.id);
+  // відповідь на підказку «Пошук» / «Перевірка посилань» — робимо саме те, що обрано
+  const rt = msg.reply_to_message && msg.reply_to_message.from && msg.reply_to_message.from.is_bot ? msg.reply_to_message.text || "" : "";
+  if (rt.startsWith(ASK_CHECK)) return runCheck(env, msg.chat.id, text);
+  if (rt.startsWith(ASK_SEARCH)) return runSearch(env, msg.chat.id, text);
   const fm = /^стежити\s*[:—-]?\s*(.*)$/is.exec(text);
   if (fm) return follow(env, msg.chat.id, fm[1]);
   if (isCheckRequest(text)) {
@@ -675,9 +811,7 @@ async function onMessage(env, msg) {
         text: "Надішліть фрагмент скарги чи клопотання з посиланнями на рішення ВС — одним повідомленням. Бот звірить кожен номер справи й дату з базою LEX_K.\n\nМатеріали проваджень і персональні дані не надсилайте." });
     }
     CASE_RE.lastIndex = 0;
-    await tg(env, "sendChatAction", { chat_id: msg.chat.id, action: "typing" });
-    const a = checkAnswer(await loadData(env), body);
-    return tg(env, "sendMessage", { chat_id: msg.chat.id, text: a.text, parse_mode: "HTML", link_preview_options: { is_disabled: true }, reply_markup: a.markup });
+    return runCheck(env, msg.chat.id, body);
   }
   if (text.startsWith("/") && !/^\/check\b/i.test(text)) return sendHelp(env, msg.chat.id);
   await tg(env, "sendChatAction", { chat_id: msg.chat.id, action: "typing" });
@@ -691,9 +825,43 @@ async function onMessage(env, msg) {
 }
 
 async function onCallback(env, cq) {
-  if (cq.data === "help" && cq.message) {
+  const d = cq.data || "", chatId = cq.message && cq.message.chat.id;
+  if (d === "help" && cq.message) {
     await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
-    return sendHelp(env, cq.message.chat.id);
+    return sendHelp(env, chatId);
+  }
+  // розділи довідки: h: — у тому самому повідомленні, hn: — новим повідомленням
+  const hm = /^(h|hn):(\w+)$/.exec(d);
+  if (hm && cq.message) {
+    await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
+    if (hm[1] === "hn") return sendHelp(env, chatId, hm[2]);
+    const v = helpView(hm[2]);
+    const r = await tg(env, "editMessageText", { chat_id: chatId, message_id: cq.message.message_id, text: v.text, parse_mode: "HTML",
+      link_preview_options: { is_disabled: true }, reply_markup: { inline_keyboard: v.kb } });
+    return r.ok ? r : sendHelp(env, chatId, hm[2]);
+  }
+  // приклади з довідки
+  if (d.startsWith("ex:s:") && cq.message) {
+    await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
+    return runSearch(env, chatId, d.slice(5));
+  }
+  if (d === "ex:c" && cq.message) {
+    await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
+    return runCheck(env, chatId, CHECK_SAMPLE, "<b>Приклад фрагмента:</b>\n<blockquote>" + esc(CHECK_SAMPLE) + "</blockquote>\n");
+  }
+  if (d.startsWith("ex:f:") && cq.message) {
+    await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
+    return follow(env, chatId, d.slice(5));
+  }
+  if (d === "subs" && cq.message) {
+    await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
+    return sendSubs(env, chatId);
+  }
+  // «Перевірити як посилання» під пошуком за номером справи
+  if (d === "ck" && cq.message) {
+    const q = (/[Зз]а запитом «([^»]+)»/.exec(cq.message.text || "") || [])[1];
+    await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
+    return q ? runCheck(env, chatId, q) : null;
   }
   if (cq.data === "marks" && cq.message) {
     const data = await loadData(env);

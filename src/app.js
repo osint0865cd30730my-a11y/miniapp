@@ -658,9 +658,12 @@ document.addEventListener("click",e=>{
     for(const m of txt.matchAll(/(\d{1,4}\/\d{1,6}\/\d{2}(?:-к)?)(?![\d\/])/gi)){ const raw=m[1], k0=nc(raw).replace(/-к$/,""); if(seen.has(k0)) continue; seen.add(k0);
       const ps=caseIdx.get(nc(raw))||caseIdx.get(k0)||caseIdx.get(k0+"-к")||[];
       const ov=[...new Set([...(OVER[raw]||OVER[k0]||OVER[k0+"-к"]||[]),...(depCase(raw)?[depCase(raw).i]:[])])].filter(i=>{const q=P(i); return q&&q.m==="indented"&&!ps.includes(q);});
-      // дата поруч із номером (до 120 знаків перед ним і 60 після) — найближча
-      const from=Math.max(0,m.index-120), to=Math.min(txt.length,m.index+raw.length+60); let date=null,best=1e9;
-      for(const dm of txt.slice(from,to).matchAll(/(?<!\d)(\d{1,2})\.(\d{1,2})\.(\d{4})(?!\d)/g)){ const pos=from+dm.index, dist=Math.abs(pos-m.index); if(dist<best){best=dist; date=iso(dm[1],dm[2],dm[3]);} }
+      // дата біля номера: остання в 120 знаках перед ним («від 07.04.2025 у справі № …»), не далі за попередній номер;
+      // якщо там немає — перша в 60 знаках після, не далі за наступний номер
+      const DR=/(?<!\d)(\d{1,2})\.(\d{1,2})\.(\d{4})(?!\d)/g, nums=[...txt.matchAll(/\d{1,4}\/\d{1,6}\/\d{2}/g)].map(x=>x.index);
+      const prv=Math.max(-1,...nums.filter(i=>i<m.index)), nxt=Math.min(txt.length,...nums.filter(i=>i>m.index));
+      const db=[...txt.slice(Math.max(0,m.index-120,prv+1),m.index).matchAll(DR)].pop(), da=[...txt.slice(m.index+raw.length,Math.min(m.index+raw.length+60,nxt)).matchAll(DR)][0];
+      const dd=db||da, date=dd?iso(dd[1],dd[2],dd[3]):null;
       const dates=[...new Set(POS.flatMap(q=>q.d.filter(d=>d[2]&&nc(d[2]).replace(/-к$/,"")===k0).map(d=>d[1])))].sort();
       out.push({no:raw,ps,over:ov.length?ov:null,date,dates,refs:(REFBY.get(k0)||[]).filter(r=>!r.dec)}); }
     S.check=out; render(true); }
