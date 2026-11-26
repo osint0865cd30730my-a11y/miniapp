@@ -11,6 +11,13 @@
  *   SUBS            KV-сховище для сповіщень (підписки на запити й переглянуті позиції).
  *                   Без нього бот працює як раніше, лише без кнопки «Стежити за запитом».
  *
+ * Канал (необов'язково; потрібне сховище SUBS):
+ *   CHANNEL         @адреса або числовий id каналу; бот має бути його адміністратором з правом публікації
+ *   OWNER_ID        id чату власника з ботом (бот показує його на /id). Чернетки постів приходять лише сюди,
+ *                   у канал пост іде тільки після кнопки «Опублікувати».
+ *   Другий запуск за розкладом, наприклад «0 12 * * *»: зранку чернетка «Позиція дня», вдень — «Цифра дня»
+ *   (у п'ятницю — «Тижневий огляд»). Команди власника: /kanal, /post <текст>.
+ *
  * Розклад (Settings → Trigger events → Cron): раз на день, наприклад «0 7 * * *» (09:00 за Києвом
  * взимку). Бот порівнює bot.json з тим, що вже бачив, і надсилає підписникам нові позиції
  * та нові позначки відступу за їхніми запитами.
@@ -456,12 +463,13 @@ function suggestions(q) {
 const NON_TEXT =
   "Я шукаю позиції Верховного Суду за текстом. Напишіть статтю, слова або номер справи, наприклад <code>ст. 111-1 ч. 5</code>.";
 
-const startKeyboard = () => ({
+const startKeyboard = env => ({
   inline_keyboard: [
     [{ text: "Відкрити LEX_K", web_app: { url: APP_URL } }],
     [{ text: "❓ Як користуватися", callback_data: "help" },
      { text: "Надіслати колезі", switch_inline_query: "" }],
     [{ text: "Позиції з відступом", callback_data: "marks" }],
+    ...(channelLink(env) ? [[{ text: "Канал LEX_K", url: channelLink(env) }]] : []),
   ],
 });
 
@@ -748,11 +756,11 @@ function digestMessage(hits, cutDate) {
 
 async function sendWelcome(env, chatId) {
   const r = await tg(env, "sendPhoto", {
-    chat_id: chatId, photo: COVER_URL, caption: WELCOME, parse_mode: "HTML", reply_markup: startKeyboard(),
+    chat_id: chatId, photo: COVER_URL, caption: WELCOME, parse_mode: "HTML", reply_markup: startKeyboard(env),
   });
   if (r.ok) return r;
   // якщо обкладинку не вдалося надіслати — те саме текстом
-  return tg(env, "sendMessage", { chat_id: chatId, text: WELCOME, parse_mode: "HTML", reply_markup: startKeyboard() });
+  return tg(env, "sendMessage", { chat_id: chatId, text: WELCOME, parse_mode: "HTML", reply_markup: startKeyboard(env) });
 }
 
 const sendHelp = (env, chatId, sec = "main") => {
@@ -812,6 +820,12 @@ async function onMessage(env, msg) {
     await sendWelcome(env, msg.chat.id);
     return sendMenu(env, msg.chat.id, MENU_NOTE);
   }
+  if (/^\/id\b/.test(text)) return tg(env, "sendMessage", { chat_id: msg.chat.id, text: "Ваш id у Telegram: <code>" + msg.chat.id + "</code>", parse_mode: "HTML" });
+  if (isOwner(env, msg.chat.id)) {
+    if (/^\/(kanal|channel)\b/.test(text)) return sendChannelMenu(env, msg.chat.id);
+    if (/^\/post\b/.test(text)) return chReady(env) ? ownDraft(env, msg) : sendChannelMenu(env, msg.chat.id);
+    if (env.SUBS && msg.reply_to_message && !text.startsWith("/") && await editDraft(env, msg)) return;
+  }
   if (/^\/help\b/.test(text)) return sendHelp(env, msg.chat.id);
   if (/^\/(pidpysky|subs)\b/.test(text)) return sendSubs(env, msg.chat.id);
   // кнопки внизу екрана
@@ -855,6 +869,7 @@ async function onMessage(env, msg) {
 
 async function onCallback(env, cq) {
   const d = cq.data || "", chatId = cq.message && cq.message.chat.id;
+  if (d.startsWith("ch:")) return onChannelCallback(env, cq);
   if (d === "help" && cq.message) {
     await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
     return sendHelp(env, chatId);
@@ -951,6 +966,233 @@ async function onInline(env, iq) {
   return tg(env, "answerInlineQuery", body);
 }
 
+/* ---------- канал ---------- */
+// Бот готує чернетку поста й надсилає її власникові (OWNER_ID). У канал (CHANNEL) пост іде лише після кнопки
+// «Опублікувати». Стан — у сховищі SUBS: ch:state (що вже було), ch:d:<id повідомлення> (чернетки, 7 днів).
+
+const BOT_LINK = "https://t.me/lexa_praktyka_bot";
+const CH_DAYS = [1, 2, 3, 4, 5];  // дні тижня, коли бот готує чернетки (1 — понеділок, 0 — неділя)
+const CH_NOON_UTC = 10;           // запуск за розкладом до цієї години UTC вважається ранковим
+const CH_DRAFT_TTL = 7 * 24 * 3600;
+const CH_NAMES = { pos: "Позиція дня", fact: "Цифра дня", week: "Тижневий огляд", own: "Свій пост" };
+const FACT_WHO = {
+  sbu: "у справах за підслідністю СБУ", nabu: "Вищого антикорупційного суду (справи НАБУ і САП)",
+  dbr: "у справах за підслідністю ДБР", beb: "у справах за підслідністю БЕБ", police: "у справах Національної поліції",
+};
+
+const isOwner = (env, id) => !!env.OWNER_ID && String(id) === String(env.OWNER_ID).trim();
+const chReady = env => !!(env.SUBS && env.CHANNEL && env.OWNER_ID);
+function channelLink(env) {
+  const c = String((env && env.CHANNEL) || "").trim();
+  return /^@\w{4,}$/.test(c) ? "https://t.me/" + c.slice(1) : null;
+}
+async function chState(env) {
+  const st = (await env.SUBS.get("ch:state", "json")) || {};
+  return { pos: st.pos || [], fact: st.fact || [], weekAt: st.weekAt || "" };
+}
+const chBotRow = () => [{ text: "Бот: пошук і перевірка посилань", url: BOT_LINK }];
+const pct = (c, n) => Math.round(c / n * 100) + "%";
+const artTag = a => "#" + a.replace(/^ст\.\s*/i, "ст").replace(/[^\p{L}\d]+/gu, "_").replace(/_+$/, "");
+const isoMinus = (iso, days) => new Date(Date.parse(iso + "T00:00:00Z") - days * 864e5).toISOString().slice(0, 10);
+
+// «Позиція дня»: найновіша в базі ВС позиція, якої ще не було в каналі. Змінені позиції, ті, від яких ВС відступив,
+// і ті, питання за якими передано на ОП чи ВП, не пропонуємо.
+function posDraft(data, st, tried = []) {
+  const skip = new Set([...st.pos, ...tried]), dep = depMap(data), ref = refMap(data);
+  const ok = p => !skip.has(p.i) && p.m !== "modified" &&
+    !p._cases.some(c => (dep.get(c) || []).some(q => q !== p) || (ref.get(c) || []).length);
+  const pool = data.p.filter(ok).sort((a, b) => (b.a || "").localeCompare(a.a || "") || pdate(b).localeCompare(pdate(a)));
+  const p = pool.find(p => p.h) || pool[0];
+  if (!p) return null;
+  const arts = p.r.slice(0, 3);
+  let text = "<b>Позиція дня</b>" + (arts.length ? " · " + esc(arts.join(", ")) : "") + "\n\n<b>" + esc(cut(p.h || p.t, 700)) + "</b>";
+  if (p.x) text += "\n\n<blockquote expandable>" + esc(cut(p.x, 1800)) + "</blockquote>";
+  text += "\n<i>" + esc(mark(p) + meta(p)) + "</i>\nПозиція № " + esc(p.i) + " у базі правових позицій ВС";
+  if (arts.length) text += "\n\n" + arts.map(artTag).join(" ");
+  const row = [{ text: "Відкрити в LEX_K", url: appLinkFor(p) }];
+  if (edrsr(p)) row.push({ text: "Рішення в ЄДРСР ↗", url: edrsr(p) });
+  return { kind: "pos", key: p.i, text, mode: "HTML", kb: [row, chBotRow()] };
+}
+
+// «Цифра дня»: готовий підрахунок з розділу «Покарання» (поле f у bot.json), по одному на частину статті.
+function factDraft(data, st, tried = []) {
+  const all = data.f || [];
+  if (!all.length) return null;
+  const skip = new Set(tried);
+  let f = all.find(f => !st.fact.includes(f.id) && !skip.has(f.id));
+  if (!f) f = all.find(f => !skip.has(f.id)); // усі вже були — починаємо коло спочатку (дані за цей час оновилися)
+  if (!f) return null;
+  const extra = [["za", "заочно"], ["s75", "зі звільненням від відбування з випробуванням (ст. 75 КК)"], ["ug", "за угодою"], ["s69", "із застосуванням ст. 69 КК"]]
+    .filter(([k]) => f[k] && f[k] / f.n >= 0.01).map(([k, t]) => t + " — " + pct(f[k], f.n));
+  let text = "<b>Цифра дня</b> · " + esc(f.p) + " ст. " + esc(f.a) + " КК\n\n<b>" + f.n + " " +
+    plural(f.n, "обвинувальний вирок", "обвинувальні вироки", "обвинувальних вироків") + "</b> першої інстанції " +
+    FACT_WHO[f.k] + " з " + esc(f.from) + " до " + esc(f.cut) + (f.sample ? " — вибірка останніх вироків, не вся практика" : "") + ".";
+  if (f.top.length) text += "\n\nНайчастіше призначали: " + f.top.map(([l, c]) => esc(l) + " — " + c + " (" + pct(c, f.n) + ")").join(", ") + ".";
+  if (extra.length) text += "\nЗ усіх вироків: " + extra.join(", ") + ".";
+  if (f.apk >= 5) text += "\nАпеляція: переглянуто " + f.apk + " " + plural(f.apk, "вирок", "вироки", "вироків") + ", без змін залишено " + f.apu + " (" + pct(f.apu, f.apk) + ")" +
+    (f.apc ? ", покарання змінено в " + f.apc : "") + ".";
+  text += "\n\n<i>Підрахунок за вироками, опублікованими у відкритих даних ЄДРСР (ДСА): це не вся практика і не прогноз покарання. " +
+    "Розбір автоматичний, кожен вирок у застосунку має посилання на текст.</i>\n\n" + artTag("ст. " + f.a + " КК");
+  return { kind: "fact", key: f.id, text, mode: "HTML", kb: [[{ text: "Покарання в LEX_K", url: APP_LINK }], chBotRow()] };
+}
+
+// «Тижневий огляд»: позиції, додані до бази ВС після попереднього огляду, і нові передачі на ОП чи ВП.
+function weekDraft(data, st) {
+  const since = st.weekAt || isoMinus(data.e || new Date().toISOString().slice(0, 10), 7);
+  const fresh = data.p.filter(p => (p.a || "") > since).sort((a, b) => pdate(b).localeCompare(pdate(a)));
+  const refs = (data.ref || []).filter(r => (r.date || "") > since);
+  if (!fresh.length && !refs.length) return null;
+  let text = "<b>Тижневий огляд</b> · нове в базі з " + fd(since) + "\n";
+  const links = [];
+  if (fresh.length) {
+    text += "\n<b>Нові позиції Верховного Суду: " + fresh.length + "</b>";
+    fresh.slice(0, 6).forEach((p, k) => {
+      text += "\n\n<b>" + (k + 1) + ".</b> " + esc(cut(p.h || p.t, 260)) + "\n<i>" + esc(mark(p) + meta(p)) + "</i>";
+      if (links.length < 6) links.push({ text: (k + 1) + " · у LEX_K", url: appLinkFor(p) });
+    });
+    if (fresh.length > 6) text += "\n\nРешта — у застосунку.";
+  }
+  if (refs.length) {
+    text += "\n\n<b>Передано на розгляд ОП ККС чи ВП ВС: " + refs.length + "</b>";
+    refs.slice(0, 4).forEach(r => { text += "\n• " + esc(cut(r.issue, 220)) + " <i>(" + esc(r.to) + ", ухвала від " + fd(r.date) + ")</i>"; });
+  }
+  const kb = [];
+  for (let i = 0; i < links.length; i += 3) kb.push(links.slice(i, i + 3));
+  kb.push([{ text: "Відкрити LEX_K", url: APP_LINK }], chBotRow());
+  const upto = [data.e, ...fresh.map(p => p.a), ...refs.map(r => r.date)].filter(Boolean).sort().pop();
+  return { kind: "week", key: upto, text, mode: "HTML", kb };
+}
+
+function makeDraft(kind, data, st, tried) {
+  return kind === "pos" ? posDraft(data, st, tried) : kind === "fact" ? factDraft(data, st, tried) : kind === "week" ? weekDraft(data, st) : null;
+}
+const chControls = d => [[
+  { text: "✅ Опублікувати", callback_data: "ch:pub" },
+  ...(d.kind === "pos" || d.kind === "fact" ? [{ text: "🔁 Інший", callback_data: "ch:alt" }] : []),
+  { text: "✖ Пропустити", callback_data: "ch:skip" },
+]];
+// текст поста: HTML від бота або текст власника з його ж форматуванням (entities)
+const chBody = d => (d.mode === "HTML" ? { text: d.text, parse_mode: "HTML" } : { text: d.text, entities: d.entities || [] });
+const chMsg = (d, extraRows) => ({ ...chBody(d), link_preview_options: { is_disabled: true }, reply_markup: { inline_keyboard: [...d.kb, ...(extraRows || [])] } });
+const putDraft = (env, mid, d) => env.SUBS.put("ch:d:" + mid, JSON.stringify(d), { expirationTtl: CH_DRAFT_TTL });
+
+// Надсилає власникові чернетку: той самий вигляд, що буде в каналі, плюс рядок керування.
+async function sendDraft(env, d) {
+  const r = await tg(env, "sendMessage", { chat_id: env.OWNER_ID, ...chMsg(d, chControls(d)) });
+  if (r.ok) await putDraft(env, r.result.message_id, d);
+  return r;
+}
+
+// Запуск за розкладом: зранку «Позиція дня», вдень «Цифра дня», у п'ятницю вдень «Тижневий огляд» (якщо є що оглядати).
+async function channelTick(env, when) {
+  if (!chReady(env)) return { skipped: "канал не налаштовано" };
+  const day = when.getUTCDay();
+  if (!CH_DAYS.includes(day)) return { skipped: "вихідний" };
+  const slot = when.getUTCHours() < CH_NOON_UTC ? "am" : "pm";
+  const tick = "ch:tick:" + when.toISOString().slice(0, 10) + ":" + slot;
+  if (await env.SUBS.get(tick)) return { skipped: "уже було" };
+  await env.SUBS.put(tick, "1", { expirationTtl: 2 * 24 * 3600 });
+  const data = await loadData(env), st = await chState(env);
+  let d = slot === "am" ? posDraft(data, st) : (day === 5 && weekDraft(data, st)) || factDraft(data, st);
+  if (!d) return { draft: null };
+  const r = await sendDraft(env, d);
+  return { draft: d.kind, key: d.key, ok: !!r.ok };
+}
+
+async function sendChannelMenu(env, chatId) {
+  if (!env.SUBS || !env.CHANNEL) {
+    return tg(env, "sendMessage", { chat_id: chatId, text: "Канал ще не підключено: у налаштуваннях воркера потрібні змінна CHANNEL і сховище SUBS. Порядок — у bot/README.md, розділ «Канал»." });
+  }
+  const ch = await tg(env, "getChat", { chat_id: env.CHANNEL });
+  const st = await chState(env);
+  const text = ch.ok
+    ? "<b>Канал: " + esc(ch.result.title || env.CHANNEL) + "</b>\nУже опубліковано або пропущено: позицій — " + st.pos.length + ", «цифр дня» — " + st.fact.length + "." +
+      "\n\nЧернетки приходять сюди за розкладом. У канал пост потрапляє лише після «Опублікувати»." +
+      "\nЩоб виправити текст, відповідайте на чернетку (reply) новим текстом. Свій пост: <code>/post текст</code>."
+    : "Бот не бачить канал <code>" + esc(env.CHANNEL) + "</code>: " + esc(ch.description || "помилка") + ".\nДодайте бота адміністратором каналу з правом публікувати повідомлення і перевірте змінну CHANNEL.";
+  return tg(env, "sendMessage", { chat_id: chatId, text, parse_mode: "HTML",
+    reply_markup: ch.ok ? { inline_keyboard: [[{ text: "Позиція дня", callback_data: "ch:new:pos" }, { text: "Цифра дня", callback_data: "ch:new:fact" }], [{ text: "Тижневий огляд", callback_data: "ch:new:week" }]] } : undefined });
+}
+
+// Власник відповів на чернетку новим текстом — замінюємо текст, кнопки лишаються.
+async function editDraft(env, msg) {
+  const mid = msg.reply_to_message.message_id, d = await env.SUBS.get("ch:d:" + mid, "json");
+  if (!d) return false;
+  Object.assign(d, { text: msg.text, mode: "ent", entities: msg.entities || [] });
+  const r = await tg(env, "editMessageText", { chat_id: msg.chat.id, message_id: mid, ...chMsg(d, chControls(d)) });
+  if (r.ok) await putDraft(env, mid, d);
+  await tg(env, "sendMessage", { chat_id: msg.chat.id, text: r.ok ? "Текст чернетки оновлено. Перевірте її вище й натисніть «Опублікувати»." : "Не вдалося оновити чернетку: " + (r.description || "помилка") });
+  return true;
+}
+
+// /post <текст> — власний пост власника: теж через чернетку, з тими самими кнопками на застосунок і бот.
+async function ownDraft(env, msg) {
+  const m = /^\s*\/post(@\w+)?\s+/i.exec(msg.text);
+  if (!m || !msg.text.slice(m[0].length).trim()) {
+    return tg(env, "sendMessage", { chat_id: msg.chat.id, text: "Напишіть текст одразу після команди: /post Ваш текст. Бот покаже чернетку з кнопками на застосунок і бот." });
+  }
+  const off = m[0].length;
+  const entities = (msg.entities || []).filter(e => e.offset >= off).map(e => ({ ...e, offset: e.offset - off }));
+  return sendDraft(env, { kind: "own", key: "", text: msg.text.slice(off), mode: "ent", entities, kb: [[{ text: "Відкрити LEX_K", url: APP_LINK }], chBotRow()] });
+}
+
+async function onChannelCallback(env, cq) {
+  const act = cq.data.slice(3), chatId = cq.message && cq.message.chat.id, mid = cq.message && cq.message.message_id;
+  const answer = (text, alert) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text, show_alert: !!alert });
+  if (act === "noop") return answer();
+  if (!isOwner(env, cq.from.id) || !chReady(env) || !cq.message) return answer("Керувати каналом може лише власник бота.", true);
+  const nk = /^new:(pos|fact|week)$/.exec(act);
+  if (nk) {
+    const d = makeDraft(nk[1], await loadData(env), await chState(env));
+    if (!d) return answer(nk[1] === "week" ? "Після попереднього огляду нового в базі немає." : "Немає чого запропонувати.", true);
+    await answer();
+    return sendDraft(env, d);
+  }
+  const d = await env.SUBS.get("ch:d:" + mid, "json");
+  if (!d) return answer("Чернетка застаріла. Нову дає /kanal.", true);
+  const done = async (label, url) => {
+    await env.SUBS.delete("ch:d:" + mid);
+    return tg(env, "editMessageReplyMarkup", { chat_id: chatId, message_id: mid,
+      reply_markup: { inline_keyboard: [...d.kb, [url ? { text: label, url } : { text: label, callback_data: "ch:noop" }]] } });
+  };
+  const remember = async () => {
+    const st = await chState(env);
+    if (d.kind === "pos" && !st.pos.includes(d.key)) st.pos.push(d.key);
+    if (d.kind === "fact") {
+      if (!st.fact.includes(d.key)) st.fact.push(d.key);
+      const all = (await loadData(env)).f || [];
+      if (all.length && all.every(f => st.fact.includes(f.id))) st.fact = []; // коло пройдено — наступного разу спочатку
+    }
+    if (d.kind === "week" && d.key > st.weekAt) st.weekAt = d.key;
+    await env.SUBS.put("ch:state", JSON.stringify(st));
+  };
+  if (act === "pub") {
+    const r = await tg(env, "sendMessage", { chat_id: env.CHANNEL, ...chMsg(d) });
+    if (!r.ok) return answer("Не опубліковано: " + (r.description || "помилка") + ". Перевірте, що бот — адміністратор каналу.", true);
+    await remember();
+    await answer("Опубліковано");
+    const link = channelLink(env);
+    return done("✅ Опубліковано" + (link ? " · відкрити пост" : ""), link ? link + "/" + r.result.message_id : null);
+  }
+  if (act === "skip") {
+    await remember(); // щоб бот не пропонував те саме знову
+    await answer("Пропущено");
+    return done("✖ Не опубліковано");
+  }
+  if (act === "alt" && (d.kind === "pos" || d.kind === "fact")) {
+    await remember(); // «Інший» означає «цей не публікуємо»: відхилений варіант завтра не повернеться
+    const tried = [...(d.tried || []), d.key];
+    const n = makeDraft(d.kind, await loadData(env), await chState(env), tried);
+    if (!n) return answer("Інших варіантів зараз немає.", true);
+    n.tried = tried;
+    const r = await tg(env, "editMessageText", { chat_id: chatId, message_id: mid, ...chMsg(n, chControls(n)) });
+    if (!r.ok) return answer("Не вдалося показати інший варіант.", true);
+    await putDraft(env, mid, n);
+    return answer();
+  }
+  return answer();
+}
+
 /* ---------- вхід ---------- */
 
 export default {
@@ -991,14 +1233,18 @@ export default {
       let dataInfo;
       try { const d = await loadData(env); dataInfo = d.p.length + " позицій, зріз " + d.e; }
       catch (e) { dataInfo = "дані не завантажено: " + e.message; }
-      return Response.json({ webhook: hook.ok, commands: cmds.ok, data: dataInfo, notifications: !!env.SUBS, error: hook.ok ? undefined : hook.description });
+      return Response.json({ webhook: hook.ok, commands: cmds.ok, data: dataInfo, notifications: !!env.SUBS,
+        channel: env.CHANNEL ? (chReady(env) ? "чернетки власникові, публікація після схвалення" : "бракує OWNER_ID або сховища SUBS") : undefined, error: hook.ok ? undefined : hook.description });
     }
 
     return new Response("LEX_K bot is running");
   },
 
-  // Cron (Settings → Trigger events): щоденна розсилка нових позицій підписникам
+  // Cron (Settings → Trigger events): розсилка нових позицій підписникам і чернетки постів для каналу
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(digest(env).then(r => console.log("digest " + JSON.stringify(r)), e => console.log("digest failed: " + (e && e.stack || e))));
+    // розсилка сама відсіює вже надіслане, тому її можна запускати на кожному спрацюванні розкладу
+    ctx.waitUntil(digest(env).then(r => console.log("digest " + JSON.stringify(r)), e => console.log("digest failed: " + (e && e.stack || e)))
+      .then(() => channelTick(env, new Date(event.scheduledTime || Date.now())))
+      .then(r => console.log("channel " + JSON.stringify(r)), e => console.log("channel failed: " + (e && e.stack || e))));
   },
 };

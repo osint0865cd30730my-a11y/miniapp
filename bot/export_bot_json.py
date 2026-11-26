@@ -41,6 +41,56 @@ def compact(p: dict) -> dict:
     }
 
 
+# Розділи «Покарання» для рубрики каналу «Цифра дня»: ключ у даних застосунку → чиї це вироки
+FACT_KINDS = {"g": "sbu", "gv": "nabu", "gd": "dbr", "gb": "beb", "gn": "police"}
+FACT_MIN = 15  # частини статей з меншою кількістю вироків у «Цифру дня» не беремо
+# тут у базі не всі вироки, а вибірка останніх: у пості це сказано прямо
+FACT_SAMPLE = {("gn", None), ("gd", "402"), ("gd", "407")}
+
+
+def facts(data: dict) -> list:
+    """Заготовки для «Цифри дня»: по одній на частину статті — скільки обвинувальних вироків першої інстанції,
+    найчастіші покарання, частка заочних, ст. 75, угод, ст. 69 і результат апеляції. Лише підрахунок наявних даних."""
+    out = []
+    for key, kind in FACT_KINDS.items():
+        G = data.get(key)
+        if not G or not G.get("arts"):
+            continue
+        V, AP = G["V"], G.get("ap") or {}
+        for art, A in G["arts"].items():
+            for part, P in (A.get("parts") or {}).items():
+                rows = P.get("r") or []
+                if len(rows) < FACT_MIN or part == "без частини":
+                    continue
+                vids = list(dict.fromkeys(r[0] for r in rows))
+                cnt = {}
+                for r in rows:
+                    lab = P["labels"][r[1]]
+                    cnt[lab] = cnt.get(lab, 0) + 1
+                top = sorted(((l, c) for l, c in cnt.items() if l != "строк не розпізнано"), key=lambda x: -x[1])[:3]
+                fl = lambda bit: sum(1 for v in vids if V[v][4] & bit)
+                ap = [AP[str(v)][0] for v in vids if str(v) in AP]
+                known = [c for c in ap if c <= 6]
+                out.append({
+                    "id": f"{key}|{art}|{part}", "k": kind, "a": art, "p": part, "n": len(vids),
+                    "top": [[l, c] for l, c in top],
+                    "za": fl(1), "s75": fl(2), "ug": fl(4), "s69": fl(8),
+                    "apk": len(known), "apu": known.count(0), "apc": known.count(1),
+                    "from": G.get("from"), "cut": G.get("cut"),
+                    "sample": (key, None) in FACT_SAMPLE or (key, art) in FACT_SAMPLE,
+                })
+    # чергуємо органи, у межах органу — від найбільших вибірок: щоб канал не тиждень поспіль писав про одну статтю
+    by = {}
+    for f in sorted(out, key=lambda f: -f["n"]):
+        by.setdefault(f["k"], []).append(f)
+    mixed, i = [], 0
+    while any(by.values()):
+        for k in list(by):
+            if by[k]:
+                mixed.append(by[k].pop(0))
+    return mixed
+
+
 def export(index_path, out_path=None) -> Path:
     index_path = Path(index_path)
     out_path = Path(out_path) if out_path else index_path.with_name("bot.json")
@@ -48,7 +98,9 @@ def export(index_path, out_path=None) -> Path:
     # o — карта бази «справа → позиції, пов'язані з відступом від висновку в ній» (для перевірки посилань у боті)
     payload = {"v": 1, "e": data.get("e"), "p": [compact(p) for p in data["p"]], "o": data.get("o") or {},
                # ref — передачі на ОП ККС / ВП ВС (для попереджень у перевірці посилань)
-               "ref": data.get("ref") or []}
+               "ref": data.get("ref") or [],
+               # f — заготовки «Цифри дня» для каналу (підрахунок з розділів «Покарання»)
+               "f": facts(data)}
     out_path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     return out_path
 
