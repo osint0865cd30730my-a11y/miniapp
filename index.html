@@ -165,7 +165,16 @@ const cut = (t,n) => t.length>n ? t.slice(0,t.lastIndexOf(' ',n)>n*0.6?t.lastInd
 POS.forEach(p=>{ p._s=(p.t+" "+p.h+" "+p.x+" "+p.r.join(" ")+" "+p.d.map(d=>d[2]).join(" ")+" пп "+p.i).toLowerCase();
   p.d.map(d=>d[2]).concat(p.k||[]).forEach(c=>{ if(c){ const k=nc(c); if(!caseIdx.has(k)) caseIdx.set(k,[]); if(!caseIdx.get(k).includes(p)) caseIdx.get(k).push(p); } }); });
 const ARTC = {}; POS.forEach(p=>p.r.forEach(a=>ARTC[a]=(ARTC[a]||0)+1));
-const N_TH = POS.filter(p=>p.h).length, MARKED = POS.filter(p=>p.m);
+// Від яких рішень відступив ВС: номери справ поруч зі словом «відступ» у тексті позицій «з відступом».
+// DEP: справа (без «-к») → номер нової позиції. depBy(p): номер позиції, якою ВС відступив від висновку p.
+const DEP = (()=>{ const m=new Map(), cre=/\d{1,4}\/\d{1,6}\/\d{2}(?:-к)?/g;
+  POS.filter(p=>p.m==="indented").forEach(p=>{ const txt=[p.h||"",p.t||"",p.x||""].join(" "), own=new Set(p.d.map(d=>nc(d[2]||"").replace(/-к$/,""))), re=/відступ/gi; let mm;
+    while((mm=re.exec(txt))){ (txt.slice(mm.index, mm.index+400).match(cre)||[]).forEach(c=>{ const k=nc(c).replace(/-к$/,""); if(!own.has(k)&&!m.has(k)) m.set(k,p); }); } });
+  return m; })();
+const pdate = p => ((p.d[0]||[])[1]||p.a||"");
+const depBy = p => { for(const d of p.d){ const k=nc(d[2]||"").replace(/-к$/,""), q=k&&DEP.get(k); if(q&&q.i!==p.i&&pdate(q)>pdate(p)) return q; } return null; };
+const depCase = c => DEP.get(nc(c||"").replace(/-к$/,"")) || null;
+const N_TH = POS.filter(p=>p.h).length, MARKED = POS.filter(p=>p.m||depBy(p));
 
 const ARTN = {"111":"Державна зрада","111-1":"Колабораційна діяльність","438":"Воєнні злочини"};
 const PARTS = {"111-1":{
@@ -226,7 +235,7 @@ const S = {tab:"positions",stacks:{positions:[{v:"home"}],regions:[{v:"home"}],s
 try{ const s=JSON.parse(localStorage.getItem("lexa2")||"null"); if(s){Object.assign(S.follow,s.follow||{});Object.assign(S.subs,s.subs||{});if(s.district)S.district=s.district;if(s.inst)S.inst=s.inst;if(s.reg&&(s.reg==="*"||(D.g&&D.g.reg[s.reg])))S.reg=s.reg} }catch(e){}
 function save(){ try{localStorage.setItem("lexa2",JSON.stringify({follow:S.follow,subs:S.subs,district:S.district,reg:S.reg,inst:S.inst}))}catch(e){} }
 
-function mBadge(p){ return p.m==="indented"?'<span class="badge b-warn">З відступом</span>':p.m==="modified"?'<span class="badge b-info">Змінена</span>':''; }
+function mBadge(p){ return (depBy(p)?'<span class="badge b-bad">Від неї відступили</span> ':'')+(p.m==="indented"?'<span class="badge b-warn">З відступом</span>':p.m==="modified"?'<span class="badge b-info">Змінена</span>':''); }
 function rnd(seed){ let h=2166136261; for(const ch of seed){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)} return ()=>{h+=0x6D2B79F5;let t=Math.imul(h^h>>>15,1|h);t^=t+Math.imul(t^t>>>7,61|t);return((t^t>>>14)>>>0)/4294967296}; }
 function counts(pid,d,mode){
   const r=rnd(pid+d+mode), total=Math.floor(5+r()*r()*150);
@@ -241,7 +250,7 @@ const MOCK = '<span class="demo">Макет</span>';
 
 /* ===== Позиції (справжні дані) ===== */
 function posRow(p){ const d=p.d[0]||[];
-  return '<button class="row" data-a="pos" data-v="'+p.i+'"><span class="main"><span class="t" style="font-size:15px">'+esc(p.h||p.t)+'</span><div class="s">'+court(p)+(d[1]?' · '+fd(d[1]):'')+(p.r.length?' · '+esc(p.r.slice(0,2).join(", ")):'')+'</div>'+(p.m?'<div class="s">'+mBadge(p)+'</div>':'')+'</span><span class="chev">›</span></button>'; }
+  return '<button class="row" data-a="pos" data-v="'+p.i+'"><span class="main"><span class="t" style="font-size:15px">'+esc(p.h||p.t)+'</span><div class="s">'+court(p)+(d[1]?' · '+fd(d[1]):'')+(p.r.length?' · '+esc(p.r.slice(0,2).join(", ")):'')+'</div>'+((p.m||depBy(p))?'<div class="s">'+mBadge(p)+'</div>':'')+'</span><span class="chev">›</span></button>'; }
 const MARK='<svg class="mk" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="lxg" gradientUnits="userSpaceOnUse" x1="40" y1="14" x2="66" y2="86"><stop offset="0" stop-color="#3D8BFF"/><stop offset="1" stop-color="#FFC23D"/></linearGradient></defs><g transform="translate(-1 0)"><path d="M18 28 L32 14 L44 14 L44 64 L66 64 L66 78 L58 86 L18 86 Z" fill="url(#lxg)"/><rect x="72" y="76" width="14" height="10" rx="2" fill="url(#lxg)"/></g></svg>';
 function header(title,back,mock){ return '<header class="hdr'+(back?'':' top')+'">'+(back?'<button class="back" data-a="back" aria-label="Назад">‹ Назад</button>':MARK)+'<h1>'+esc(title)+'</h1>'+(mock?'<span class="demo" title="Числа й приклади на цьому екрані умовні">Макет</span>':'')+'</header>'; }
 function listHTML(list,limit){ const n=limit||60, show=list.slice(0,n);
@@ -271,7 +280,7 @@ function vArts(){ const num=a=>parseFloat(a.replace("ст. ","").replace("-","."
   const grp=code=>Object.keys(ARTC).filter(a=>a.endsWith(" "+code)).sort((a,b)=>num(a)-num(b)).map(a=>'<button class="row" data-a="byart" data-v="'+a+'"><span class="main t">'+a+'</span><span class="v">'+ARTC[a]+'</span><span class="chev">›</span></button>').join("");
   return header("Статті",true)+'<div class="wrap"><div class="sh">Кримінальний кодекс</div><div class="group">'+grp("КК")+'</div><div class="sh">Кримінальний процесуальний кодекс</div><div class="group">'+grp("КПК")+'</div></div>'; }
 function vByArt(a){ const list=byDate(POS.filter(p=>p.r.includes(a))); return header(a,true)+'<div class="wrap"><p class="note" style="margin-top:0">Позицій: '+list.length+'</p>'+listHTML(list,250)+'</div>'; }
-function vMarked(){ return header("Відступи та зміни",true)+'<div class="wrap"><p class="note" style="margin-top:0">«З відступом» — позицію ухвалено з відступом від попереднього висновку. «Змінена» — позначка бази ВС про подальшу зміну позиції.</p>'+listHTML(byDate(MARKED),100)+'</div>'; }
+function vMarked(){ return header("Відступи та зміни",true)+'<div class="wrap"><p class="note" style="margin-top:0">«З відступом» — позицію ухвалено з відступом від попереднього висновку. «Змінена» — позначка бази ВС про подальшу зміну позиції. «Від неї відступили» — пізніша позиція з відступом посилається на справу цієї позиції; зв’язок знайдено автоматично за номером справи, тому звіряйте з текстом нової позиції.</p>'+listHTML(byDate(MARKED),100)+'</div>'; }
 
 const CITN = (()=>{ const m=new Map(); Object.entries((D.g&&D.g.citall)||{}).forEach(([c,v])=>{ const k=nc(c).replace(/-к$/,""); m.set(k,(m.get(k)||[]).concat(v)); }); return m; })();
 function applyBlock(p){
@@ -296,6 +305,7 @@ function cite(p){ const d=p.d[0]||[]; return (d[0]||"Постанова").toLowe
 function vPos(id){
   const p=P(id), long=p.x.length>700, open=S.full[p.i]||!long;
   let h=header("Позиція № "+p.i,true)+'<div class="wrap">';
+  const dq=depBy(p); if(dq) h+='<div class="alert a-bad"><b>Від цього висновку ВС відступив</b>'+esc(court(dq))+(pdate(dq)?' '+fd(pdate(dq)):'')+' ухвалив позицію з відступом від висновку в цій справі. Перш ніж посилатися, прочитайте нову позицію.<div style="margin-top:8px"><button class="badge b-ok" data-a="pos" data-v="'+dq.i+'">Нова позиція № '+dq.i+' ›</button></div></div>';
   if(p.m==="indented") h+='<div class="alert a-warn"><b>Ухвалена з відступом</b>Цією позицією Верховний Суд відступив від попереднього висновку. Посилання на стару практику з цього питання перевіряйте.</div>';
   if(p.m==="modified") h+='<div class="alert a-info"><b>Позицію змінено</b>У базі ВС є позначка про подальшу зміну. Звірте з текстом нижче й останніми рішеннями.</div>';
   h+='<div class="group"><div class="pad">'+(p.h?'<div class="s" style="font-size:12px;color:var(--hint);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px">Теза бази LEX_K</div><p class="thesis">'+esc(p.h)+'</p>':'<p class="thesis">'+esc(p.t)+'</p>')+'</div></div>'+
@@ -377,10 +387,21 @@ const AP_L=["Вирок залишено без змін","Змінено пок
 const vrowAp = vi => { const x=G.V[vi], a=(G.ap||{})[vi], c=G.C[x[3]]; return '<a class="row" href="https://reyestr.court.gov.ua/Review/'+a[1]+'" target="_blank" rel="noopener"><span class="main"><span class="t" style="font-size:15px">'+esc(AP_L[a[0]])+'</span><div class="s">Вирок '+x[1]+' · '+esc(c[0])+' · справа № '+esc(x[2])+'</div></span><span class="chev">↗</span></a>'; };
 const inReg = (vi,g) => g==="*"||G.C[G.V[vi][3]][1]===g;
 function partRows(p,g){ return p.r.filter(x=>inReg(x[0],g)); }
+// Повнота даних: скільки вироків знайдено і чому це не вся практика (згортається)
+function complNote(){
+  const id="compl|"+(G===GS?"sbu":G===GSP?"sbupre":G===GB?"beb":G===GD?"dbr":G===GN?"npu":"x"), open=S.sv===id;
+  const closed=Object.values(G.arts||{}).reduce((n,a)=>n+(a.closed||0),0);
+  return '<div class="group" style="margin-bottom:6px"><button class="row" data-a="sv" data-v="'+id+'"><span class="main"><span class="t" style="font-size:15px">Повнота даних</span><div class="s">Опублікована практика: '+vyr(G.verdicts)+' до '+esc(G.cut)+'</div></span><span class="badge b-mute">не вся практика</span><span class="chev">'+(open?'⌄':'›')+'</span></button>'+
+   (open?'<div class="pad" style="padding-top:0;font-size:14px;line-height:1.5;color:#E6EAE6">Тут лише вироки з відкритих даних ДСА. Частину рішень у ЄДРСР закрито за постановами органів розслідування або внесено із запізненням, тому реальних вироків більше, ніж показано.'+
+    (G===GS?' Для справ за підслідністю СБУ після 24.02.2022 це відчутніше: доступ до вироків у справах про колабораційну діяльність і державну зраду обмежували масово, тож за ст. 111, 111-1, 111-2 вибірка може бути неповною.':'')+
+    (G===GN?' Для поліції взято вибірку останніх вироків за частинами статей, а не всі вироки.':'')+
+    (closed?' У '+closed+' знайдених вироках текст закрито: відомий лише результат.':'')+
+    ' Числа показують, як суди вирішували опубліковані справи, а не частку всіх справ.</div>':'')+'</div>';
+}
 const srcNote = () => '<p class="note">Джерело: '+esc(G.source)+'. Вироки з '+G.from+' до '+G.cut+', '+vyr(G.verdicts)+' без повторних публікацій. Розбір автоматичний, за резолютивною частиною: перед цитуванням звіряйте з текстом. Дані не є рекомендацією щодо міри покарання.</p>';
 function vSentHome(){
   const arts=Object.keys(G.arts).sort((a,b)=>artCount(b)-artCount(a));
-  return header("Практика покарань")+'<div class="wrap">'+(S.inst==="all"?segVaks("sbu"):'')+perSel()+regSel()+
+  return header("Практика покарань")+'<div class="wrap">'+(S.inst==="all"?segVaks("sbu"):'')+perSel()+regSel()+complNote()+
    '<div class="sh">Вироки за підслідністю СБУ · '+esc(rname(S.reg))+' <span class="badge b-ok">Дані ЄДРСР</span></div><div class="group">'+
    arts.map(a=>{const n=artCount(a);const n2=S.reg2?artCountG(a,S.reg2):0;return (n||n2)?'<button class="row" data-a="sa" data-v="'+a+'"><span class="main"><span class="t">Ст. '+a+' КК</span>'+(ARTF[a]?'<div class="s">'+esc(ARTF[a])+'</div>':'')+'</span>'+two(n,n2)+'<span class="chev">›</span></button>':''}).join("")+'</div>'+
    (S.per==="pre"&&G===GSP?apSum("sap","виправдувальні вироки і вироки з реальним позбавленням волі (без ст. 75 КК), ухвалені до 24.02.2022")+'<div class="sh">Касація</div><div class="group"><button class="row" data-a="kas" data-v="sbupre"><span class="main"><span class="t" style="font-size:15px">Постанови ККС у справах СБУ до 24.02.2022: де рішення скасовано або змінено</span></span><span class="chev">›</span></button></div>':'')+srcNote()+
@@ -393,9 +414,30 @@ function vSentArt(a){
   let h=header("Ст. "+a+" КК",true)+'<div class="wrap">'+regSel()+(ARTF[a]?'<p class="note" style="margin-top:0">'+esc(ARTF[a])+'</p>':'');
   h+='<div class="sh">Обвинувальні вироки першої інстанції · '+esc(rname(g))+'</div><div class="group">'+(parts.map(k=>{const p=A.parts[k],{t,top}=partHead(p,g);
      const t2=S.reg2?partHead(p,S.reg2).t:0;return (t||t2)?'<button class="row" data-a="sp" data-v="'+a+'|'+k+'"><span class="main"><span class="t">'+(k==="без частини"?"Частину не визначено":k)+'</span>'+((PARTS[a]||{})[k]?'<div class="s">'+esc(PARTS[a][k])+'</div>':'')+'<div class="s">'+top.map(x=>esc(x[0])+' — '+x[1]).join(", ")+'</div></span>'+two(t,t2)+'<span class="chev">›</span></button>':''}).join("")||'<div class="pad note">Для цієї області вироків немає.</div>')+'</div>';
+  h+=apArt(A,g);
   if(g==="*") h+='<div class="sh">Усі вироки за статтею · Україна</div><div class="group">'+[["Усього вироків",A.n],["Виправдувальні",A.acq],["Частково виправдувальні",A.part],["Апеляційні вироки",A.appeal],["Текст закрито",A.closed]].map(r=>'<div class="row"><span class="main t" style="font-size:15px">'+r[0]+'</span><span class="v">'+r[1]+'</span></div>').join("")+'</div>'+
     (G===GV?'':'<div class="sh">За областями</div><div class="group">'+A.regions.slice(0,12).map(r=>'<div class="row"><span class="main t" style="font-size:15px">'+esc(r[0])+'</span><span class="v">'+r[1]+'</span></div>').join("")+'</div>');
   return h+srcNote()+'</div>';
+}
+// Апеляція за статтею в області: скільки вироків залишено без змін, змінено, скасовано (серед тих, де результат відомий)
+const AP_G=[["Залишено без змін",[0],"c1"],["Змінено",[1,2,5],"c5"],["Скасовано",[3,4,6],"c4"]];
+function apArt(A,g){
+  const AP=G.ap||{}; if(!Object.keys(AP).length) return '';
+  const rows=gg=>Object.values(A.parts).flatMap(p=>partRows(p,gg)).map(x=>x[0]);
+  const stat=gg=>{ const ids=[...new Set(rows(gg))], known=ids.filter(i=>AP[i]&&AP[i][0]<=6), pend=ids.filter(i=>AP[i]&&AP[i][0]===8).length;
+    return {ids,known,pend,by:AP_G.map(([,cs])=>known.filter(i=>cs.includes(AP[i][0])))}; };
+  const g2=S.reg2, a=stat(g), b=g2?stat(g2):null;
+  if(!a.known.length&&!(b&&b.known.length)) return '';
+  const id0="apa|"+g+"|";
+  // частку показуємо лише від 10 відомих результатів: на 1–9 рішеннях відсотки вводять в оману
+  const MIN=10, pc=(n,t)=>t>=MIN?' · '+pct(n,t):'', w=(n,t)=>t>=MIN?n/t*100:0;
+  const line=(k)=>{ const [l,,c]=AP_G[k], ix=a.by[k], id=id0+k, open=S.sv===id;
+    const v=b?'<span class="v2"><b class="ca">'+ix.length+pc(ix.length,a.known.length)+'</b><b class="cb">'+b.by[k].length+pc(b.by[k].length,b.known.length)+'</b></span>':'<span class="v">'+ix.length+pc(ix.length,a.known.length)+'</span>';
+    return '<button class="row" data-a="sv" data-v="'+esc(id)+'"'+(ix.length?'':' disabled')+'><span class="main"><span class="t" style="font-size:15px">'+l+'</span><div class="stack mini" style="margin-top:7px"><i class="'+c+'" style="width:'+w(ix.length,a.known.length)+'%"></i></div>'+(b?'<div class="stack mini" style="margin-top:4px"><i class="cmpB" style="width:'+w(b.by[k].length,b.known.length)+'%"></i></div>':'')+'</span>'+v+'<span class="chev">'+(ix.length?(open?'⌄':'›'):'')+'</span></button>'+(open?listBlock(id,ix,vrowAp):''); };
+  return '<div class="sh">Апеляція за статтею · '+esc(rname(g))+(b?' · '+esc(rname(g2)):'')+' <span class="badge b-ok">Дані ЄДРСР</span></div><div class="group">'+AP_G.map((_,k)=>line(k)).join("")+
+   '<div class="row"><span class="main t" style="font-size:15px;color:var(--hint)">Результат відомий</span><span class="v">'+a.known.length+' із '+a.ids.length+(b?' · '+b.known.length+' із '+b.ids.length:'')+'</span></div>'+
+   ((a.pend||(b&&b.pend))?'<div class="row"><span class="main t" style="font-size:15px;color:var(--hint)">Ще на апеляційному розгляді</span><span class="v">'+a.pend+(b?' · '+b.pend:'')+'</span></div>':'')+'</div>'+
+   ((a.known.length<MIN||(b&&b.known.length<MIN))?'<p class="note" style="margin-top:6px">Якщо відомо менше ніж '+MIN+' результатів, частку не показано: на кількох рішеннях вона випадкова.</p>':'')+'<p class="note">Частки — серед обвинувальних вироків першої інстанції, для яких у відкритих даних знайдено апеляційне рішення по суті. Апеляційні рішення шукали не для всіх вироків, а насамперед для виправдувальних і з реальним позбавленням волі, тому це не частка всіх оскаржених вироків області. «Змінено» — змінено покарання чи іншу частину або ухвалено новий вирок; «Скасовано» — скасовано з новим розглядом, закриттям провадження чи з іншим результатом. Порівняння областей не є оцінкою судів чи суддів.</p>';
 }
 function vSentPart(v){
   const [a,k]=v.split("|"), p=G.arts[a].parts[k], g=S.reg, g2=S.reg2, s=SENT[v], rr=partRows(p,g), t=rr.length, rr2=g2?partRows(p,g2):[], t2=rr2.length;
@@ -431,16 +473,16 @@ function vRegions(){
   const rows=top.map(([c,n])=>{
     const x=(D.xc||{})[c], ps=caseIdx.get(nc(c))||caseIdx.get(nc(c).replace(/-к$/,''))||caseIdx.get(nc(c)+'-к')||(x?POS.filter(p=>p.i===x[0]):[]), vs=(G.vs||{})[c], id="rg|"+c, open=S.sv===id, tp=((G.wk||{})[c]||[]).map(k=>TOP.find(t=>t.slug===k||t.s===k)).filter(Boolean); const vx0=vxOf(c), vx=vx0&&vx0.q?vx0:null;
     const sub='Справа № '+esc(c)+(vs?' · '+esc(vs.court)+', '+fd2(vs.date):'');
-    let h='<button class="row" data-a="sv" data-v="'+esc(id)+'"><span class="main"><span class="t" style="font-size:15px">'+(vx?esc(cut(vx.q,150)):ps.length?esc(ps[0].h||ps[0].t):sub)+'</span><div class="s">'+(ps.length?sub+' · позицій у базі: '+ps.length:vx?sub+' · '+(vx.k==='c'?'фрагмент постанови, позиції LPD немає':'переказ бази, позиції LPD немає'):(tp.length?'Згадано в темі «'+esc(tp[0].title||tp[0].t)+'»':vx0&&vx0.k==='u'?'Текст постанови є в базі; '+esc(vx0.r&&!/автоматично/.test(vx0.r)?vx0.r.replace(/^перевірено вручну: /,''):'висновок ще не опрацьовано'):vx0&&vx0.k==='m'?'Постанови з таким номером у відкритих даних ДСА не знайдено; номер у вироках може бути помилковим':'У базі LEX_K цієї постанови немає'))+'</div>'+(x&&x[1]?'<div class="s" style="color:var(--warn)">'+esc(x[1])+'</div>':'')+'</span>'+two(n,g2?cnt(c,g2):0)+'<span class="chev">'+(open?'⌄':'›')+'</span></button>';
+    let h='<button class="row" data-a="sv" data-v="'+esc(id)+'"><span class="main"><span class="t" style="font-size:15px">'+(vx?esc(cut(vx.q,150)):ps.length?esc(ps[0].h||ps[0].t):sub)+'</span><div class="s">'+(ps.length?sub+' · позицій у базі: '+ps.length:vx?sub+' · '+(vx.k==='c'?'фрагмент постанови, позиції LPD немає':'переказ бази, позиції LPD немає'):(tp.length?'Згадано в темі «'+esc(tp[0].title||tp[0].t)+'»':vx0&&vx0.k==='u'?'Текст постанови є в базі; '+esc(vx0.r&&!/автоматично/.test(vx0.r)?vx0.r.replace(/^перевірено вручну: /,''):'висновок ще не опрацьовано'):vx0&&vx0.k==='m'?'Постанови з таким номером у відкритих даних ДСА не знайдено; номер у вироках може бути помилковим':'У базі LEX_K цієї постанови немає'))+'</div>'+(x&&x[1]?'<div class="s" style="color:var(--warn)">'+esc(x[1])+'</div>':'')+(depCase(c)?'<div class="s" style="color:var(--bad);font-weight:700">ВС відступив від висновку в цій справі (позиція № '+depCase(c).i+')</div>':'')+'</span>'+two(n,g2?cnt(c,g2):0)+'<span class="chev">'+(open?'⌄':'›')+'</span></button>';
     if(open){
       const cit=((G.cit||{})[c]||[]).filter(vi=>inReg(vi,g));
       h+='<div class="pad" style="display:flex;flex-wrap:wrap;gap:8px">'+(vs?'<a class="badge b-info" href="https://reyestr.court.gov.ua/Review/'+vs.id+'" target="_blank" rel="noopener">Текст постанови ('+esc(vs.court)+', '+fd2(vs.date)+') ↗</a>':'<span class="badge b-mute">Постанову у відкритих даних ДСА не знайдено</span>')+
-         (ps.length?'<button class="badge b-ok" data-a="pos" data-v="'+ps[0].i+'">Позиція в базі ›</button>':'')+(!ps.length&&tp.length?'<button class="badge b-ok" data-a="topicgo" data-v="'+(tp[0].slug||tp[0].s)+'">Тема в базі ›</button>':'')+'</div>'+
+         (ps.length?'<button class="badge b-ok" data-a="pos" data-v="'+ps[0].i+'">Позиція в базі ›</button>':'')+(depCase(c)?'<button class="badge b-bad" data-a="pos" data-v="'+depCase(c).i+'">Відступ: позиція № '+depCase(c).i+' ›</button>':'')+(!ps.length&&tp.length?'<button class="badge b-ok" data-a="topicgo" data-v="'+(tp[0].slug||tp[0].s)+'">Тема в базі ›</button>':'')+'</div>'+
          (vx?'<div class="pad" style="padding-top:0"><div class="sh" style="margin:0 0 4px">'+(vx.k==='c'?'Фрагмент постанови, який наводять вироки':vx.k==='t'?'Для чого цитують постанову суди (переказ бази)':'Що вирішив ВС (переказ бази за текстом постанови)')+'</div><blockquote class="vxq">'+esc(vx.q)+'</blockquote><p class="note" style="margin:4px 0 0">'+(ps.length?'Позиція LPD за цією постановою може стосуватися іншого питання, ніж те, заради якого її цитують вироки.':'Офіційної правової позиції ВС за цією постановою в базі LPD немає.')+' Перш ніж посилатися, прочитайте постанову повністю.</p></div>':'')+'<div class="pad note" style="padding-top:0">Вироки, що посилаються на цю справу · '+cit.length+'</div>'+listBlock(id,cit);
     }
     return h;}).join("");
   const ik=rinst(), iname=INSTN[ik]||"СБУ";
-  return header("Практика за регіонами"+(ik!=="sbu"&&S.inst!=="all"?": "+(INST[ik]||[iname])[0]:""))+'<div class="wrap">'+(S.inst==="all"?segReg(ik):'')+perSel()+regSel()+
+  return header("Практика за регіонами"+(ik!=="sbu"&&S.inst!=="all"?": "+(INST[ik]||[iname])[0]:""))+'<div class="wrap">'+(S.inst==="all"?segReg(ik):'')+perSel()+regSel()+complNote()+
    '<div class="sh">На які постанови ВС посилаються суди · '+esc(rname(g))+' <span class="badge b-ok">Дані ЄДРСР</span></div>'+
    '<p class="note" style="margin-top:0">Вироків за підслідністю '+iname+': '+R.n+'. Номер справи Верховного Суду розпізнано в '+R.withvs+' з них.'+(R2?' '+esc(rname(g2))+': '+R2.n+' вироків, номер справи ВС — у '+R2.withvs+'.':'')+' Натисніть на справу, щоб відкрити постанову ВС і вироки, які на неї посилаються.</p><div class="group">'+rows+'</div>'+
    '<p class="note">Число — у скількох вироках згадано цю справу. Згадка не означає, що суд застосував висновок: суд міг і відхилити постанову, на яку послалася сторона. Постанову ВС знайдено у відкритих даних ДСА за номером справи й датою, яку наводять вироки. Номер справи ВС розпізнано автоматично, тому частина посилань могла не потрапити. Порівняння областей не є оцінкою судів чи суддів.</p>'+srcNote()+'</div>';
@@ -527,7 +569,7 @@ function artList(arts){
 }
 function vBeb(){
   const g=GB, arts=Object.keys(g.arts).filter(a=>a!=="000");
-  return header("Покарання: БЕБ",S.tab!=="soon")+'<div class="wrap">'+(S.inst==="all"?segVaks("beb"):'')+regSel()+
+  return header("Покарання: БЕБ",S.tab!=="soon")+'<div class="wrap">'+(S.inst==="all"?segVaks("beb"):'')+regSel()+complNote()+
    '<p class="note" style="margin-top:0">Вироки за статтями, які ст. 216 КПК відносить до підслідності БЕБ, у відкритих даних ДСА: <b>'+g.verdicts+'</b> (без повторних публікацій), '+g.from+' – '+g.cut+'. ЄДРСР не зберігає, який орган розслідував справу, тому вибірку зроблено за статтями; частину вироків 2022–2023 рр. могли розслідувати інші органи. Перелік статей — за ч. 3 ст. 216 КПК (редакція від 19.11.2026). Ст. 191, 364 і пов’язані ст. 192, 358, 366, 369 (підслідні БЕБ лише за певних умов) не включено. Підакцизні товари (ст. 204) і підроблення реєстраційних документів (ст. 205-1) — однотипні справи, нижче лише кількість вироків за їхніми категоріями ЄДРСР. Частина вироків за ст. 204 опублікована під категорією ст. 199, тому потрапила до розбору.</p>'+
    artList(arts)+
    '<div class="sh">Без розбору текстів</div><div class="group">'+Object.entries(BEB_META).map(([a,o])=>'<div class="row"><span class="main"><span class="t">Ст. '+a+' КК</span><div class="s">'+esc(o.t)+' · '+o.y.map(y=>y[0]+': '+y[1]).join(" · ")+'</div></span><span class="v">'+o.y.reduce((s,y)=>s+y[1],0)+'</span></div>').join("")+'</div>'+
@@ -548,7 +590,7 @@ function vKas(k){
 }
 function vDbr(){
   const g=GD, arts=Object.keys(g.arts).filter(a=>a!=="000");
-  return header("Покарання: ДБР",S.tab!=="soon")+'<div class="wrap">'+(S.inst==="all"?segVaks("dbr"):'')+regSel()+
+  return header("Покарання: ДБР",S.tab!=="soon")+'<div class="wrap">'+(S.inst==="all"?segVaks("dbr"):'')+regSel()+complNote()+
    '<p class="note" style="margin-top:0">Вироки за військовими злочинами (ст. 402–435 КК, крім ст. 422 — підслідність ДБР) у відкритих даних ДСА: <b>'+g.verdicts+'</b> (без повторних публікацій), '+g.from+' – '+g.cut+'. Самовільне залишення частини (ст. 407) і непокору (ст. 402) не розбирали: ці справи однотипні; нижче — лише кількість вироків. Вирок рахується за першою статтею Особливої частини КК у резолютивній частині.</p>'+
    artList(arts)+
    '<div class="sh">Без розбору текстів</div><div class="group">'+Object.entries(DBR_META).map(([a,o])=>'<div class="row"><span class="main"><span class="t">Ст. '+a+' КК</span><div class="s">'+esc(o.t)+' · '+o.y.map(y=>y[0]+': '+y[1]).join(" · ")+'</div></span><span class="v">'+o.y.reduce((s,y)=>s+y[1],0)+'</span></div>').join("")+'</div>'+
