@@ -679,5 +679,13 @@ render();
   window.__tgSyncBack();
 })();
 
+/* Відкрити позицію з бота: #pos-15734 або startapp=pos-15734 */
+(function(){
+  const tg=window.Telegram&&window.Telegram.WebApp;
+  const sp=(tg&&tg.initDataUnsafe&&tg.initDataUnsafe.start_param)||"";
+  const m=/^pos-(\d+)$/.exec(sp)||/^pos-(\d+)$/.exec(location.hash.slice(1));
+  if(m&&P(m[1])){ if(!S.inst) S.inst="all"; S.tab="positions"; S.posD="all"; S.stacks.positions=[{v:"home"}]; push("pos",m[1]); }
+})();
+
 </script>
 </body></html>
