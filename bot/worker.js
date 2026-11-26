@@ -321,7 +321,7 @@ const WELCOME =
   "<code>ст. 111-1 ч. 5</code> · <code>обшук без ухвали</code> · <code>757/29843/19-к</code>\n\n" +
   "<b>Видно відступи від практики.</b> Позиції, якими ВС відступив від попередніх висновків, і позиції, які згодом змінено, " +
   "позначено, тож застарілу практику не процитуєте. Перелік — кнопкою нижче або запитом <code>відступ</code>.\n\n" +
-  "<b>Перевіряйте посилання.</b> Вставте фрагмент документа з номерами справ — бот скаже, які рішення є в базі, від яких ВС відступив і де не збігається дата.\n\n" +
+  "<b>Перевіряйте посилання.</b> Вставте фрагмент документа з номерами справ — бот скаже, які рішення є в базі, від яких ВС відступив, які передано на ОП чи ВП і де не збігається дата.\n\n" +
   "<b>Стежте за темами.</b> Під результатами пошуку натисніть «Стежити за запитом» — нові позиції ВС за ним прийдуть сюди.\n\n" +
   "<b>Надсилайте колегам</b> — в будь-якому чаті наберіть <code>@lexa_praktyka_bot</code> і запит.\n\n" +
   "Повна база — у застосунку.";
@@ -395,6 +395,22 @@ function depMap(data) {
   data._dep = m;
   return m;
 }
+// Передачі на ОП ККС / ВП ВС (поле ref): справа, від висновку в якій пропонують відступити → [нерозглянуті передачі].
+// Вирішено, як і в застосунку: у базі є позиція в справі передачі пізнішої дати або поле decided.
+function refMap(data) {
+  if (data._ref) return data._ref;
+  const m = new Map();
+  for (const r of data.ref || []) {
+    const k = r.case ? caseKey(r.case) : "";
+    const done = r.decided || (k && data.p.some(p => p._cases.includes(k) && pdate(p) > r.date));
+    if (done) continue;
+    for (const c of r.ch || []) { const ck = caseKey(c), a = m.get(ck) || []; a.push(r); m.set(ck, a); }
+  }
+  data._ref = m;
+  return m;
+}
+const refTo = r => r.to === "ВП ВС" ? "Велику Палату ВС" : r.to === "ОП ККС" ? "об’єднану палату ККС" : "судову палату ККС";
+
 function caseCount(data) {
   if (!data._ncases) data._ncases = new Set(data.p.flatMap(p => p.d.map(d => d[2]).filter(Boolean).map(caseKey))).size;
   return data._ncases;
@@ -407,7 +423,7 @@ function isCheckRequest(text) {
 }
 
 function checkRefs(data, text) {
-  const dep = depMap(data), found = [], seen = new Set();
+  const dep = depMap(data), refs = refMap(data), found = [], seen = new Set();
   for (const m of text.matchAll(CASE_RE)) {
     const k = caseKey(m[0]);
     if (seen.has(k)) continue;
@@ -421,7 +437,7 @@ function checkRefs(data, text) {
     }
     const ps = data.p.filter(p => p._cases.includes(k));
     const dates = [...new Set(data.p.flatMap(p => p.d.filter(d => d[2] && caseKey(d[2]) === k).map(d => d[1])))].sort();
-    found.push({ no: m[0], k, date, ps, dates, dep: (dep.get(k) || []).filter(q => !ps.includes(q)) });
+    found.push({ no: m[0], k, date, ps, dates, dep: (dep.get(k) || []).filter(q => !ps.includes(q)), refs: refs.get(k) || [] });
     if (found.length >= CHECK_MAX) break;
   }
   return found;
@@ -433,12 +449,18 @@ function checkAnswer(data, text) {
     return { text: "У тексті не знайдено номерів справ. Надішліть фрагмент, де посилання виглядають як <code>постанова ВС від 07.04.2025 у справі № 349/508/16-к</code>.",
       markup: { inline_keyboard: [] } };
   }
-  const n = { ok: 0, dep: 0, date: 0, none: 0 }, items = [], links = [];
+  const n = { ok: 0, dep: 0, ref: 0, date: 0, none: 0 }, items = [], links = [];
   rows.forEach((r, i) => {
     const lines = [];
     if (r.dep.length) {
       n.dep++;
       lines.push("<b>ВС відступив від висновку в цій справі</b>: " + r.dep.map(q => "позиція № " + q.i + " (" + court(q) + (pdate(q) ? ", " + fd(pdate(q)) : "") + ")").join("; "));
+    }
+    if (r.refs.length) {
+      n.ref++;
+      for (const f of r.refs) lines.push("<b>Передано на " + refTo(f) + "</b> (ухвала від " + fd(f.date) + (f.case ? " у справі № " + esc(f.case) : "") +
+        "): " + esc(cut(f.issue, 220)) + ". Висновок у цій справі з цього питання пропонують переглянути; рішення ще немає.");
+      if (links.length < 6) links.push({ text: "Ухвала про передачу ↗", url: "https://reyestr.court.gov.ua/Review/" + r.refs[0].id });
     }
     if (r.ps.length) {
       n.ok++;
@@ -452,7 +474,7 @@ function checkAnswer(data, text) {
       n.date++;
       lines.push("<b>Звірте дату</b>: у тексті " + fd(r.date) + ", а в базі рішення в цій справі від " + r.dates.map(fd).join(", ") + ".");
     }
-    if (!r.ps.length && !r.dep.length) {
+    if (!r.ps.length && !r.dep.length && !r.refs.length) {
       n.none++;
       lines.push("<b>Немає в базі LEX_K</b>. Це не означає, що рішення не існує: звірте номер і дату в ЄДРСР.");
     }
@@ -460,7 +482,7 @@ function checkAnswer(data, text) {
   });
   const head = "<b>Перевірка посилань</b> · номерів справ: " + rows.length +
     (rows.length >= CHECK_MAX ? " (перевірено перші " + CHECK_MAX + ")" : "") + "\n" +
-    ["є в базі — " + n.ok, n.dep ? "ВС відступив — " + n.dep : "", n.date ? "дата не збігається — " + n.date : "", "немає в базі — " + n.none].filter(Boolean).join(" · ");
+    ["є в базі — " + n.ok, n.dep ? "ВС відступив — " + n.dep : "", n.ref ? "передано на ОП/ВП — " + n.ref : "", n.date ? "дата не збігається — " + n.date : "", "немає в базі — " + n.none].filter(Boolean).join(" · ");
   const foot = "<i>Бот звіряє номери справ і дати лише з базою правових позицій LEX_K (справ у базі: " + caseCount(data) + "). " +
     "Існування рішення в ЄДРСР він не гарантує: «немає в базі» трапляється й для справжніх рішень. Надісланий текст не зберігається.</i>";
   let body = head + "\n\n" + items.join("\n\n") + "\n\n" + foot;

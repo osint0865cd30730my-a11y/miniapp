@@ -7,7 +7,9 @@
                            <!--LEXK:DATA--> та <!--LEXK:APP-->
     src/pages-head.html  — шапка сторінки для GitHub Pages (Telegram Web App SDK)
 Дані — окремо:
-    data.json            — усе, що вбудовується в <script id="data">
+    data.json            — усе, що вбудовується в <script id="data"> (дає конвеєр бази знань)
+    data/referrals.json  — передачі кримінальних справ на ОП ККС / ВП ВС; ведеться в репозиторії,
+                           при збиранні додається до даних як поле ref
 
 Команди (запускати з кореня репозиторію):
     python3 tools/build.py
@@ -42,8 +44,40 @@ def read(p: Path) -> str:
     return p.read_text(encoding="utf-8")
 
 
+ART_RE = re.compile(r"[Сс]т\.\s*(\d+(?:-\d+)?)")
+CODE_RE = re.compile(r"\b(КК|КПК|ЦК)\b|Закону|Конституції")
+
+
+def ref_articles(issue: str, extra: list) -> list:
+    """Статті питання у вигляді «96-1 КК»: з тексту (ст. N ... КК/КПК у межах 40 знаків) і з поля art."""
+    out = []
+    for m in ART_RE.finditer(issue):
+        c = CODE_RE.search(issue, m.end(), m.end() + 40)
+        if c and c.group(1):
+            out.append(m.group(1) + " " + c.group(1))
+    out += [re.sub(r"^ст\.\s*", "", a) for a in extra]
+    return sorted(set(out))
+
+
+def with_extras(data: str) -> str:
+    """Додає до даних те, що ведеться в репозиторії: передачі на ОП/ВП (data/referrals.json → ref)."""
+    ref = ROOT / "data" / "referrals.json"
+    if not ref.exists():
+        return data
+    d = json.loads(data)
+    r = json.loads(read(ref))
+    items = []
+    for it in r["items"]:
+        it = dict(it)
+        it["a"] = ref_articles(it.get("issue", ""), it.pop("art", []))
+        items.append(it)
+    d["ref"], d["refUpdated"] = items, r.get("updated", "")
+    return json.dumps(d, ensure_ascii=False, separators=(",", ":"))
+
+
 def assemble(data: str) -> tuple[str, str]:
     """Повертає (index.html для Pages, фрагмент для артефакту)."""
+    data = with_extras(data)
     shell, app = read(SRC / "shell.html"), read(SRC / "app.js")
     for mark in ("<!--LEXK:DATA-->", "<!--LEXK:APP-->"):
         if shell.count(mark) != 1:
