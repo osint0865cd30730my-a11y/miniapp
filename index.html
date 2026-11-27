@@ -729,6 +729,17 @@ function vMore(){
    '<div class="sh">Інструменти</div><div class="group"><button class="row" data-a="go" data-v="check"><span class="main"><span class="t">Перевірка посилань у документі</span><div class="s">Звіряє номери справ із базою та знаходить відступи</div></span><span class="chev">›</span></button></div>'+
    '<div class="sh">Довіра</div><div class="group"><button class="row" data-a="go" data-v="about"><span class="main"><span class="t">Про дані й методологію</span><div class="s">Зріз '+CUT+'</div></span><span class="chev">›</span></button></div></div>';
 }
+// Перелік усіх постанов і окремих думок ККС і ВП ВС у кримінальних справах (kks-index.txt поряд із застосунком):
+// підвантажується лише під час перевірки посилань. KKX: справа (нормалізована, без «-к») → [[дата РРРР-ММ-ДД, id, тип]]
+let KKX=null, KKX_CUT="", KKX_ERR=false;
+function loadKKX(){ if(KKX||KKX_ERR) return Promise.resolve(KKX);
+  return fetch("kks-index.txt").then(r=>{ if(!r.ok) throw 0; return r.text(); }).then(t=>{ const m=new Map(), L=t.split("\n");
+    const h=/по (\d{4}-\d{2}-\d{2})/.exec(L[0]); KKX_CUT=h?h[1]:"";
+    for(const l of L){ if(!l||l[0]==="#") continue; const [c,d,id,ty]=l.split("|"), k=nc(c).replace(/-к$/,"");
+      if(!m.has(k)) m.set(k,[]); m.get(k).push([d.slice(0,4)+"-"+d.slice(4,6)+"-"+d.slice(6,8),id,ty]); }
+    KKX=m; return m; }).catch(()=>{ KKX_ERR=true; return null; }); }
+const EDRSR="https://reyestr.court.gov.ua/Review/";
+const KKT={K:"постанова ККС",V:"постанова Великої Палати",k:"окрема думка (ККС)",v:"окрема думка (ВП)"};
 function vCheck(){
   let res="";
   if(S.check){ res='<div class="sh">Результат · номерів справ: '+S.check.length+'</div><div class="group">'+(S.check.length?S.check.map(c=>{
@@ -737,11 +748,17 @@ function vCheck(){
      if(c.ps.length) h+='<button class="row" data-a="pos" data-v="'+c.ps[0].i+'"><span class="main"><span class="t">№ '+esc(c.no)+'</span><div class="s">'+court(c.ps[0])+' · '+fd(c.ps[0].d[0][1])+' · позицій у базі: '+c.ps.length+'</div></span>'+(mBadge(c.ps[0])||'<span class="badge b-ok">Є в базі</span>')+'</button>';
      (c.refs||[]).forEach(r=>{ h+='<button class="row" data-a="go" data-v="refs"><span class="main"><span class="t">№ '+esc(c.no)+'</span><div class="s">Питання передано на '+esc(r.to)+' (ухвала від '+fd(r.date)+'): '+esc(cut(r.issue,140))+'</div></span><span class="badge b-info">Передано до '+(r.to==="ВП ВС"?"ВП":"ОП")+'</span></button>'; });
      if(c.date&&c.dates&&c.dates.length&&!c.dates.includes(c.date)) h+='<div class="row"><span class="main"><span class="t">№ '+esc(c.no)+'</span><div class="s">У тексті дата '+fd(c.date)+', а в базі рішення в цій справі від '+c.dates.map(fd).join(", ")+'. Звірте реквізити.</div></span><span class="badge b-warn">Звірте дату</span></div>';
-     if(!c.over&&!c.ps.length) h+='<div class="row"><span class="main"><span class="t">№ '+esc(c.no)+'</span><div class="s">У базі такої справи немає. Це не означає, що постанови не існує: звірте реквізити в ЄДРСР.</div></span><span class="badge b-mute">Немає в базі</span></div>';
+     if(c.kk&&c.kk.length){ const pst=c.kk.filter(x=>x[2]==="K"||x[2]==="V"), shown=(pst.length?pst:c.kk).slice(-3);
+       const same=c.date?c.kk.some(x=>x[0]===c.date):null;
+       h+='<a class="row" href="'+EDRSR+shown[shown.length-1][1]+'" target="_blank" rel="noopener"><span class="main"><span class="t">№ '+esc(c.no)+' · є в ЄДРСР</span><div class="s">'+
+         shown.map(x=>KKT[x[2]]+" від "+fd(x[0])).join("; ")+(c.kk.length>shown.length?" (усього документів ККС/ВП у справі: "+c.kk.length+")":"")+
+         (same===false?'. <b>Дати '+fd(c.date)+' серед них немає</b> — перевірте реквізити.':same?'. Дата збігається.':'')+'</div></span><span class="chev">↗</span></a>'; }
+     else if(c.kk&&!c.ps.length&&!c.over) h+='<div class="row"><span class="main"><span class="t">№ '+esc(c.no)+' · <span style="color:var(--warn,#d98b2b)">не знайдено</span></span><div class="s">Постанов ККС чи Великої Палати в цій справі у відкритих даних ДСА за 2018 – '+fd(KKX_CUT)+' немає. Можливі причини: інший номер, рішення до 2018 р. або інша інстанція, текст закрито — або посилання вигадане (так буває з текстами від ШІ). Перевірте в ЄДРСР.</div></span></div>';
+     if(!c.over&&!c.ps.length&&!c.kk) h+='<div class="row"><span class="main"><span class="t">№ '+esc(c.no)+'</span><div class="s">У базі такої справи немає. Це не означає, що постанови не існує: звірте реквізити в ЄДРСР.</div></span><span class="badge b-mute">Немає в базі</span></div>';
      return h; }).join(""):'<div class="pad" style="font-size:14px;color:var(--hint)">Номерів справ у тексті не знайдено.</div>')+'</div>'; }
   return header("Перевірка посилань",true)+'<div class="wrap"><p class="note" style="margin-top:0">Вставте фрагмент із посиланнями на постанови ВС. Застосунок звірить кожен номер справи й дату з базою та покаже відступи. Перевірка виконується на вашому пристрої, текст нікуди не надсилається. Не вставляйте матеріали проваджень. Те саме вміє бот: надішліть йому фрагмент або /check.</p>'+
    '<textarea class="ta" id="doc" aria-label="Текст для перевірки">'+esc(S.docText??D.s)+'</textarea><div class="btns"><button class="btn" data-a="runcheck">Перевірити</button></div>'+res+
-   '<p class="note">Номер справи є лише в частини позицій бази ('+caseIdx.size+' справ), тому «немає в базі» трапляється й для справжніх постанов.</p></div>';
+   '<p class="note">'+(KKX?'Номери звірено з переліком усіх постанов і окремих думок ККС і Великої Палати ВС у кримінальних справах з 2018 р. ('+KKX.size+' справ, відкриті дані ДСА, по '+fd(KKX_CUT)+') і з позиціями бази.':KKX_ERR?'Перелік постанов ККС не завантажився, тому номери звірено лише з позиціями бази ('+caseIdx.size+' справ): «немає в базі» трапляється й для справжніх постанов.':'Номери звіряються з переліком усіх постанов ККС і Великої Палати з 2018 р. і з позиціями бази.')+' Чи містить постанова саме той висновок, застосунок не перевіряє.</p></div>';
 }
 function vAbout(){
   const rows=[["Позиції","Офіційні правові позиції ККС ВС і Великої Палати ВС у кримінальних справах: "+POS.length+" позицій, на які посилаються статті бази LEX_K."],["Тези","Короткий виклад позиції з бази LEX_K. Офіційний текст завжди показано поруч."],["Посилання","Кожна позиція веде на текст рішення в ЄДРСР."],["Відступи","Показано позначки бази правових позицій ВС: «з відступом» і «змінена»."],["Покарання і регіони","Вироки за підслідністю СБУ (ч. 2 ст. 216 КПК) з "+GS.from+": відкриті дані ДСА, ліцензія CC BY. Повторні публікації одного вироку відкинуто. Розбір резолютивної частини автоматичний, кожен вирок має посилання на ЄДРСР."],["Ст. 111 за округами","Вироки 2024–2026 рр. за апеляційними округами. Сумщину звірено вручну. Київ і Київська область, Одеська, Дніпропетровська, Харківська області — тексти з відкритих даних ДСА; звірені вручну округи позначено, решта — автоматичний розбір."],["Досудове","Питання досудового розслідування у справах СБУ з ключовими позиціями ВС; що ВС не вирішував — висновок бази LEX_K."],["Посилання у вироках","У картці позиції — вироки за підслідністю СБУ, у яких розпізнано номер справи, на якій стоїть позиція. Посилання не означає застосування висновку."],["Судді","Пошуку, фільтрів і статистики за суддями немає."],["Ваші запити","Пошук і перевірка працюють на пристрої, нічого не надсилається."]];
@@ -931,7 +948,9 @@ document.addEventListener("click",e=>{
     try{ navigator.clipboard.writeText(txt).then(done,manual); }catch(_){ manual(); } }
   else if(a==="copy"){ const txt=cite(P(v)), done=()=>toast("Скопійовано: "+txt);
     try{ navigator.clipboard.writeText(txt).then(done,()=>toast(txt)); }catch(_){ toast(txt); } }
-  else if(a==="runcheck"){ const txt=$("doc").value; S.docText=txt; const seen=new Set(), out=[];
+  else if(a==="runcheck"){ const txt=$("doc").value; S.docText=txt;
+    if(!KKX&&!KKX_ERR){ toast("Завантажую перелік постанов ККС…"); loadKKX().then(()=>{ const b=document.querySelector('[data-a="runcheck"]'); if(b) b.click(); }); return; }
+    const seen=new Set(), out=[];
     const iso=(d,m,y)=>y+"-"+String(m).padStart(2,"0")+"-"+String(d).padStart(2,"0");
     for(const m of txt.matchAll(/(\d{1,4}\/\d{1,6}\/\d{2}(?:-к)?)(?![\d\/])/gi)){ const raw=m[1], k0=nc(raw).replace(/-к$/,""); if(seen.has(k0)) continue; seen.add(k0);
       const ps=caseIdx.get(nc(raw))||caseIdx.get(k0)||caseIdx.get(k0+"-к")||[];
@@ -943,7 +962,7 @@ document.addEventListener("click",e=>{
       const db=[...txt.slice(Math.max(0,m.index-120,prv+1),m.index).matchAll(DR)].pop(), da=[...txt.slice(m.index+raw.length,Math.min(m.index+raw.length+60,nxt)).matchAll(DR)][0];
       const dd=db||da, date=dd?iso(dd[1],dd[2],dd[3]):null;
       const dates=[...new Set(POS.flatMap(q=>q.d.filter(d=>d[2]&&nc(d[2]).replace(/-к$/,"")===k0).map(d=>d[1])))].sort();
-      out.push({no:raw,ps,over:ov.length?ov:null,date,dates,refs:(REFBY.get(k0)||[]).filter(r=>!r.dec)}); }
+      out.push({no:raw,ps,over:ov.length?ov:null,date,dates,refs:(REFBY.get(k0)||[]).filter(r=>!r.dec),kk:KKX?(KKX.get(k0)||[]).slice().sort((x,y)=>x[0].localeCompare(y[0])):null}); }
     S.check=out; render(true); }
 });
 document.addEventListener("input",e=>{ if(e.target.id==="q"){ S.q=e.target.value; $("results").innerHTML=resultsHTML(); } });
