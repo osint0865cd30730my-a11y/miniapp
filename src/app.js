@@ -334,7 +334,7 @@ function complNote(){
   return '<div class="group" style="margin-bottom:6px"><button class="row" data-a="sv" data-v="'+id+'"><span class="main"><span class="t" style="font-size:15px">Повнота даних</span><div class="s">Опублікована практика: '+vyr(G.verdicts)+' до '+esc(G.cut)+'</div></span><span class="badge b-mute">не вся практика</span><span class="chev">'+(open?'⌄':'›')+'</span></button>'+
    (open?'<div class="pad" style="padding-top:0;font-size:14px;line-height:1.5;color:#E6EAE6">Тут лише вироки з відкритих даних ДСА. Частину рішень у ЄДРСР закрито за постановами органів розслідування або внесено із запізненням, тому реальних вироків більше, ніж показано.'+
     (G===GS?' Для справ за підслідністю СБУ після 24.02.2022 це відчутніше: доступ до вироків у справах про колабораційну діяльність і державну зраду обмежували масово, тож за ст. 111, 111-1, 111-2 вибірка може бути неповною.':'')+
-    (G===GN?' Для поліції взято вибірку останніх вироків за частинами статей, а не всі вироки.':'')+
+    (G===GN?' Для поліції взято вибірку: до 100 останніх вироків першої інстанції за кожною категорією та апеляційні вироки, а не всі вироки.'+(G.interim?' Це проміжні дані: завантаження вироків поліції триває, числа ще зміняться.':''):'')+
     (closed?' У '+closed+' знайдених вироках текст закрито: відомий лише результат.':'')+
     ' Числа показують, як суди вирішували опубліковані справи, а не частку всіх справ.</div>':'')+'</div>';
 }
@@ -568,6 +568,14 @@ function vKas(k){
    K.secs.map(([h,intro,items])=>'<div class="sh">'+esc(h)+'</div>'+(intro?'<p class="note" style="margin:0 0 8px">'+esc(intro)+'</p>':'')+'<div class="group">'+items.map(([t,L])=>'<div class="row" style="display:block;font-size:15px;line-height:1.45">'+lk(t,L)+'</div>').join("")+'</div>').join("")+
    '<p class="note">Відкриті дані ДСА (ЄДРСР, CC BY). Добірка — за текстами рішень; перед цитуванням звіряйте з повним текстом.</p></div>';
 }
+function vNpu(){
+  const g=GN, arts=Object.keys(g.arts).filter(a=>a!=="000");
+  return header("Покарання: поліція",S.tab!=="soon")+'<div class="wrap">'+(S.inst==="all"?segVaks("police"):'')+regSel()+complNote()+
+   (g.interim?'<div class="alert a-info" style="margin-top:0"><b>Проміжні дані</b>Завантаження вироків поліції триває. Зараз тут '+vyr(g.verdicts)+'; після завантаження числа зміняться.</div>':'')+
+   '<p class="note" style="margin-top:0">Справи поліції — більшість кримінальних вироків у ЄДРСР, тому тут вибірка, а не всі вироки: до 100 останніх вироків першої інстанції за кожною з найчастіших категорій справ і апеляційні вироки з відкритих даних ДСА — <b>'+g.verdicts+'</b> (без повторних публікацій), '+g.from+' – '+g.cut+'. Вирок рахується за першою статтею Особливої частини КК у резолютивній частині. Частки показують, як вирішено справи у вибірці, а не в усіх справах.</p>'+
+   artList(arts)+apSum("nap","виправдувальні вироки і вироки з реальним позбавленням волі (без ст. 75 КК)")+
+   '<p class="note">Розбір покарань автоматичний: перед цитуванням звіряйте з текстом. Результату апеляції для поліції поки немає. Статистики за суддями немає.</p></div>';
+}
 function vDbr(){
   const g=GD, arts=Object.keys(g.arts).filter(a=>a!=="000");
   return header("Покарання: ДБР",S.tab!=="soon")+'<div class="wrap">'+(S.inst==="all"?segVaks("dbr"):'')+regSel()+complNote()+
@@ -576,7 +584,7 @@ function vDbr(){
    '<div class="sh">Без розбору текстів</div><div class="group">'+Object.entries(DBR_META).map(([a,o])=>'<div class="row"><span class="main"><span class="t">Ст. '+a+' КК</span><div class="s">'+esc(o.t)+' · '+o.y.map(y=>y[0]+': '+y[1]).join(" · ")+'</div></span><span class="v">'+o.y.reduce((s,y)=>s+y[1],0)+'</span></div>').join("")+'</div>'+
    apSum("dap","виправдувальні вироки і вироки з реальним позбавленням волі (без ст. 75 КК)")+'<div class="sh">Касація</div><div class="group"><button class="row" data-a="kas" data-v="dbr"><span class="main"><span class="t" style="font-size:15px">Постанови ККС у військових справах: де рішення скасовано або змінено</span></span><span class="chev">›</span></button></div><p class="note">Кількість вироків за ст. 407 і 402 — з метаданих ЄДРСР (категорія справи). Розбір покарань автоматичний: перед цитуванням звіряйте з текстом. Результату апеляції для ДБР поки немає. Статистики за суддями немає.</p></div>';
 }
-function vSoon(k){ if(k==="dbr") return vDbr(); if(k==="beb"&&GB) return vBeb(); const o=SOON[k]; return header("Покарання: "+o.t,S.tab!=="soon",true)+'<div class="wrap"><div class="alert a-info" style="margin-top:0"><b>Розділ ще не наповнено</b>'+esc(o.x)+'</div><div class="sh">Тут буде</div><div class="group">'+["Санкція і фактичні межі покарання за частинами статей","Ст. 75, угоди, ст. 69, конфіскація","Результат апеляції за кожним вироком","Ключові постанови ККС, де вирок скасовано або змінено"].map(t=>'<div class="row"><span class="main t" style="font-size:15px">'+t+'</span><span class="badge b-mute">Буде</span></div>').join("")+'</div><p class="note">Позиції ВС і розділ «Досудове» вже працюють для всіх інституцій: висновки ВС щодо КПК спільні.</p></div>'; }
+function vSoon(k){ if(k==="dbr") return vDbr(); if(k==="beb"&&GB) return vBeb(); if(k==="police"&&GN) return vNpu(); const o=SOON[k]; return header("Покарання: "+o.t,S.tab!=="soon",true)+'<div class="wrap"><div class="alert a-info" style="margin-top:0"><b>Розділ ще не наповнено</b>'+esc(o.x)+'</div><div class="sh">Тут буде</div><div class="group">'+["Санкція і фактичні межі покарання за частинами статей","Ст. 75, угоди, ст. 69, конфіскація","Результат апеляції за кожним вироком","Ключові постанови ККС, де вирок скасовано або змінено"].map(t=>'<div class="row"><span class="main t" style="font-size:15px">'+t+'</span><span class="badge b-mute">Буде</span></div>').join("")+'</div><p class="note">Позиції ВС і розділ «Досудове» вже працюють для всіх інституцій: висновки ВС щодо КПК спільні.</p></div>'; }
 // Попередній автоматичний підрахунок за резолютивними частинами (відкриті дані ДСА, 22.11.2026)
 const VAKS={n:395,years:[["2019",2],["2020",20],["2021",34],["2022",41],["2023",58],["2024",67],["2025",87],["2026",86]],
  res:[["Обвинувальні вироки",324],["Частково виправдувальні",52],["Затверджено угоду",142],["Звільнено з випробуванням (ст. 75)",127]],
