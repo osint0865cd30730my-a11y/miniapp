@@ -1031,9 +1031,17 @@ function factDraft(data, st, tried = []) {
   if (extra.length) text += "\nЗ усіх вироків: " + extra.join(", ") + ".";
   if (f.apk >= 5) text += "\nАпеляція: переглянуто " + f.apk + " " + plural(f.apk, "вирок", "вироки", "вироків") + ", без змін залишено " + f.apu + " (" + pct(f.apu, f.apk) + ")" +
     (f.apc ? ", покарання змінено в " + f.apc : "") + ".";
-  text += "\n\n<i>Підрахунок за вироками, опублікованими у відкритих даних ЄДРСР (ДСА): це не вся практика і не прогноз покарання. " +
-    "Розбір автоматичний, кожен вирок у застосунку має посилання на текст.</i>\n\n" + artTag("ст. " + f.a + " КК");
-  return { kind: "fact", key: f.id, text, mode: "HTML", kb: [[{ text: "Покарання в LEX_K", url: APP_LINK }], chBotRow()] };
+  const tag = "\n\n" + artTag("ст. " + f.a + " КК");
+  const full = text + "\n\n<i>Підрахунок за вироками, опублікованими у відкритих даних ЄДРСР (ДСА): це не вся практика і не прогноз покарання. " +
+    "Розбір автоматичний, кожен вирок у застосунку має посилання на текст.</i>" + tag;
+  const short = text + "\n\n<i>Підрахунок за відкритими даними ЄДРСР: не вся практика і не прогноз покарання.</i>" + tag;
+  const d = { kind: "fact", key: f.id, text: full, mode: "HTML", kb: [[{ text: "Покарання в LEX_K", url: APP_LINK }], chBotRow()] };
+  // картка з tools/cards.py (GitHub Pages); підпис до фото — до 1024 символів, інакше пост іде без картки
+  if (f.img) {
+    if (visLen(full) <= CAPTION_MAX) d.photo = APP_BASE + f.img;
+    else if (visLen(short) <= CAPTION_MAX) Object.assign(d, { text: short, photo: APP_BASE + f.img });
+  }
+  return d;
 }
 
 // «Тижневий огляд»: позиції, додані до бази ВС після попереднього огляду, і нові передачі на ОП чи ВП.
@@ -1071,14 +1079,25 @@ const chControls = d => [[
   ...(d.kind === "pos" || d.kind === "fact" ? [{ text: "🔁 Інший", callback_data: "ch:alt" }] : []),
   { text: "✖ Пропустити", callback_data: "ch:skip" },
 ]];
-// текст поста: HTML від бота або текст власника з його ж форматуванням (entities)
-const chBody = d => (d.mode === "HTML" ? { text: d.text, parse_mode: "HTML" } : { text: d.text, entities: d.entities || [] });
-const chMsg = (d, extraRows) => ({ ...chBody(d), link_preview_options: { is_disabled: true }, reply_markup: { inline_keyboard: [...d.kb, ...(extraRows || [])] } });
+// текст поста: HTML від бота або текст власника з його ж форматуванням (entities). Пост із картинкою (d.photo) —
+// це фото з підписом: ті самі текст і кнопки, але поля caption / caption_entities і ліміт 1024 символи.
+const CAPTION_MAX = 1024;
+const visLen = html => html.replace(/<[^>]+>/g, "").replace(/&(lt|gt|amp|quot|#39);/g, "_").length;
+const chBody = d => d.photo
+  ? (d.mode === "HTML" ? { caption: d.text, parse_mode: "HTML" } : { caption: d.text, caption_entities: d.entities || [] })
+  : (d.mode === "HTML" ? { text: d.text, parse_mode: "HTML" } : { text: d.text, entities: d.entities || [] });
+const chMsg = (d, extraRows) => ({ ...chBody(d), ...(d.photo ? { photo: d.photo } : { link_preview_options: { is_disabled: true } }),
+  reply_markup: { inline_keyboard: [...d.kb, ...(extraRows || [])] } });
+const chSend = (env, chatId, d, extraRows) => tg(env, d.photo ? "sendPhoto" : "sendMessage", { chat_id: chatId, ...chMsg(d, extraRows) });
 const putDraft = (env, mid, d) => env.SUBS.put("ch:d:" + mid, JSON.stringify(d), { expirationTtl: CH_DRAFT_TTL });
 
 // Надсилає власникові чернетку: той самий вигляд, що буде в каналі, плюс рядок керування.
 async function sendDraft(env, d) {
-  const r = await tg(env, "sendMessage", { chat_id: env.OWNER_ID, ...chMsg(d, chControls(d)) });
+  let r = await chSend(env, env.OWNER_ID, d, chControls(d));
+  if (!r.ok && d.photo) { // Telegram не зміг узяти картинку — даємо чернетку текстом
+    delete d.photo;
+    r = await chSend(env, env.OWNER_ID, d, chControls(d));
+  }
   if (r.ok) await putDraft(env, r.result.message_id, d);
   return r;
 }
@@ -1119,7 +1138,12 @@ async function editDraft(env, msg) {
   const mid = msg.reply_to_message.message_id, d = await env.SUBS.get("ch:d:" + mid, "json");
   if (!d) return false;
   Object.assign(d, { text: msg.text, mode: "ent", entities: msg.entities || [] });
-  const r = await tg(env, "editMessageText", { chat_id: msg.chat.id, message_id: mid, ...chMsg(d, chControls(d)) });
+  if (d.photo && msg.text.length > CAPTION_MAX) {
+    await tg(env, "sendMessage", { chat_id: msg.chat.id, text: "Підпис до картинки — до " + CAPTION_MAX + " символів, а в тексті " + msg.text.length + ". Скоротіть і надішліть ще раз." });
+    return true;
+  }
+  const { photo, ...body } = chMsg(d, chControls(d));
+  const r = await tg(env, d.photo ? "editMessageCaption" : "editMessageText", { chat_id: msg.chat.id, message_id: mid, ...body });
   if (r.ok) await putDraft(env, mid, d);
   await tg(env, "sendMessage", { chat_id: msg.chat.id, text: r.ok ? "Текст чернетки оновлено. Перевірте її вище й натисніть «Опублікувати»." : "Не вдалося оновити чернетку: " + (r.description || "помилка") });
   return true;
@@ -1167,7 +1191,7 @@ async function onChannelCallback(env, cq) {
     await env.SUBS.put("ch:state", JSON.stringify(st));
   };
   if (act === "pub") {
-    const r = await tg(env, "sendMessage", { chat_id: env.CHANNEL, ...chMsg(d) });
+    const r = await chSend(env, env.CHANNEL, d);
     if (!r.ok) return answer("Не опубліковано: " + (r.description || "помилка") + ". Перевірте, що бот — адміністратор каналу.", true);
     await remember();
     await answer("Опубліковано");
@@ -1185,9 +1209,11 @@ async function onChannelCallback(env, cq) {
     const n = makeDraft(d.kind, await loadData(env), await chState(env), tried);
     if (!n) return answer("Інших варіантів зараз немає.", true);
     n.tried = tried;
-    const r = await tg(env, "editMessageText", { chat_id: chatId, message_id: mid, ...chMsg(n, chControls(n)) });
+    // нова чернетка замість старої: з картинкою й без неї повідомлення різних типів, тож не редагуємо, а замінюємо
+    const r = await sendDraft(env, n);
     if (!r.ok) return answer("Не вдалося показати інший варіант.", true);
-    await putDraft(env, mid, n);
+    await env.SUBS.delete("ch:d:" + mid);
+    await tg(env, "deleteMessage", { chat_id: chatId, message_id: mid });
     return answer();
   }
   return answer();

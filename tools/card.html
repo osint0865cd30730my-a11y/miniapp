@@ -1,0 +1,109 @@
+<!doctype html>
+<!-- Картка «Цифри дня» для каналу LEX_K (1080×1080). Малює tools/cards.py через Playwright: render(f, "a"|"c").
+     Правило змісту: кількість вироків, розподіл покарань і стійкість в апеляції. Частку заочних вироків
+     показуємо лише тоді, коли вона не більша за 49%. -->
+<html lang="uk"><head><meta charset="utf-8">
+<style>
+@font-face{font-family:M;font-weight:500;src:url(fonts/manrope-cyrillic-500-normal.woff2)}
+@font-face{font-family:M;font-weight:700;src:url(fonts/manrope-cyrillic-700-normal.woff2)}
+@font-face{font-family:M;font-weight:800;src:url(fonts/manrope-cyrillic-800-normal.woff2)}
+@font-face{font-family:M;font-weight:500;src:url(fonts/manrope-latin-500-normal.woff2);unicode-range:U+0000-00FF,U+2013-2014}
+@font-face{font-family:M;font-weight:700;src:url(fonts/manrope-latin-700-normal.woff2);unicode-range:U+0000-00FF,U+2013-2014}
+@font-face{font-family:M;font-weight:800;src:url(fonts/manrope-latin-800-normal.woff2);unicode-range:U+0000-00FF,U+2013-2014}
+*{box-sizing:border-box;margin:0}
+body{background:#060706;font-family:M,sans-serif;color:#F4F6F4}
+#card{width:1080px;height:1080px;position:relative;overflow:hidden;background:#060706;padding:72px;display:flex;flex-direction:column}
+#card::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 900px 520px at 80px 0,rgba(61,139,255,.32),rgba(61,139,255,0) 70%),radial-gradient(ellipse 760px 460px at 1080px 1080px,rgba(255,194,61,.18),rgba(255,194,61,0) 70%)}
+#card>*{position:relative}
+.top{display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:16px;font-weight:800;font-size:34px;letter-spacing:-.02em}
+.brand svg{width:52px;height:52px}
+.rub{font-size:24px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#FFD27A;background:rgba(255,194,61,.14);border:1.5px solid rgba(255,194,61,.35);padding:10px 20px;border-radius:999px}
+.art{font-size:76px;font-weight:800;letter-spacing:-.03em;line-height:1;margin-top:64px}
+.sub{font-size:30px;color:#A7AEA7;font-weight:600;margin-top:16px}
+.foot{margin-top:auto;display:flex;justify-content:space-between;align-items:flex-end;font-size:24px;color:#8C938C;font-weight:600}
+.foot b{color:#F4F6F4}
+.g{background:linear-gradient(180deg,#7FB0FF,#FFC23D);-webkit-background-clip:text;background-clip:text;color:transparent}
+.bars{margin-top:76px;display:grid;grid-template-columns:max-content 1fr 130px;column-gap:28px;row-gap:36px;align-items:center;font-size:36px;font-weight:700}
+.bars .lab{max-width:380px;line-height:1.1}
+.bars .tr{height:52px;border-radius:12px;background:rgba(255,255,255,.07);overflow:hidden}
+.bars .tr i{display:block;height:100%;border-radius:12px;background:linear-gradient(90deg,#3D8BFF,#7FB0FF)}
+.bars .tr.first i{background:linear-gradient(90deg,#3D8BFF,#FFC23D)}
+.bars .p{text-align:right;color:#FFD27A;font-variant-numeric:tabular-nums}
+.bars .oth{color:#8C938C}
+.bars .tr.oth i{background:rgba(255,255,255,.18)}
+.facts{display:flex;gap:16px;margin-top:64px;flex-wrap:wrap}
+.f{font-size:26px;font-weight:700;padding:14px 22px;border-radius:16px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.1)}
+.f b{color:#FFD27A}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:68px}
+.t{background:rgba(255,255,255,.055);border:1.5px solid rgba(255,255,255,.09);border-radius:28px;padding:46px 40px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.t.hero{grid-column:1/-1;border:1.5px solid transparent;background:linear-gradient(#0E110E,#0E110E) padding-box,linear-gradient(135deg,rgba(61,139,255,.9),rgba(255,194,61,.9)) border-box;flex-direction:row;align-items:center;justify-content:space-between;gap:32px}
+.t.hero.col{flex-direction:column;align-items:flex-start}
+.t .k{font-size:24px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#A7AEA7}
+.t .v{font-size:84px;font-weight:800;letter-spacing:-.04em;line-height:1;font-variant-numeric:tabular-nums}
+.t .d{font-size:26px;color:#A1A8A1;font-weight:600;line-height:1.35}
+.t.hero .v{font-size:120px;white-space:nowrap}
+.t.hero.col{padding:36px 40px}
+.t.hero.col .v{font-size:64px;white-space:normal}
+.tiles:has(.hero.col) .t:not(.hero){padding:34px 40px}
+</style></head><body><div id="card"></div>
+<script>
+const MARK='<svg viewBox="0 0 100 100"><defs><linearGradient id="lx" gradientUnits="userSpaceOnUse" x1="40" y1="14" x2="66" y2="86"><stop offset="0" stop-color="#3D8BFF"/><stop offset="1" stop-color="#FFC23D"/></linearGradient></defs><g transform="translate(-1 0)"><path d="M18 28 L32 14 L44 14 L44 64 L66 64 L66 78 L58 86 L18 86 Z" fill="url(#lx)"/><rect x="72" y="76" width="14" height="10" rx="2" fill="url(#lx)"/></g></svg>';
+const ORG={sbu:"справи СБУ",dbr:"справи ДБР",beb:"справи БЕБ",nabu:"справи НАБУ і САП",police:"справи Нацполіції"};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const num=n=>String(n).replace(/\B(?=(\d{3})+(?!\d))/g," ");
+const pc=(c,n)=>Math.round(c/n*100);
+const plural=(n,a,b,c)=>{const m=n%100,d=n%10;return m>10&&m<20?c:d===1?a:d>=2&&d<=4?b:c};
+const yr=s=>(String(s||"").match(/(\d{4})$/)||[])[1]||"";
+function period(f){const a=yr(f.from),b=yr(f.cut);return a&&b?(a===b?a:a+"–"+b):""}
+function head(f){return '<div class="top"><div class="brand">'+MARK+'<span>LEX<span class="g">_</span>K</span></div><div class="rub">Цифра дня</div></div>'+
+  '<div class="art">'+esc(f.p)+' ст. '+esc(f.a)+' КК</div>'}
+const foot='<div class="foot"><span>Відкриті дані ЄДРСР · не прогноз покарання</span><b>@lexk_sud</b></div>';
+// апеляцію показуємо, коли переглянуто щонайменше 5 вироків і більшість із них залишено без змін
+const apOk=f=>f.apk>=5&&f.apu/f.apk>=.5;
+const sh=(c,n)=>c/n>=.05;
+const zaOk=f=>f.za/f.n>=.05&&f.za/f.n<=.49;
+function plates(f){
+  const out=[];
+  if(apOk(f)){
+    out.push('апеляцією підтверджено <b>'+pc(f.apu,f.apk)+'%</b> переглянутих вироків');
+    if(f.apc===0)out.push('покарання в апеляції не змінювали');
+    else if(f.apc/f.apk<=.1)out.push('покарання змінено лише в <b>'+f.apc+'</b> з '+num(f.apk));
+  }
+  if(zaOk(f))out.push('заочно <b>'+pc(f.za,f.n)+'%</b>');
+  if(sh(f.ug,f.n))out.push('за угодою <b>'+pc(f.ug,f.n)+'%</b>');
+  if(sh(f.s75,f.n))out.push('ст. 75 КК <b>'+pc(f.s75,f.n)+'%</b>');
+  return out.slice(0,3);
+}
+function renderA(f){
+  const sub=num(f.n)+' '+plural(f.n,"обвинувальний вирок","обвинувальні вироки","обвинувальних вироків")+' · '+ORG[f.k]+(period(f)?' · '+period(f):'')+(f.sample?' · вибірка':'');
+  // рядки, що округлюються до 0%, не показуємо: вони йдуть в «інше»
+  const top=f.top.slice(0,3).filter(([,c],i)=>!i||pc(c,f.n)>=1), rest=f.n-top.reduce((s,[,c])=>s+c,0);
+  const rows=top.map(([l,c],i)=>({l,c,cls:i?'':'first'}));
+  if(pc(rest,f.n)>=1)rows.push({l:"інше",c:rest,cls:'oth'});
+  const max=Math.max(...rows.map(r=>r.c));
+  let bars='<div class="bars">';
+  for(const r of rows){const o=r.cls==='oth'?' oth':'';
+    bars+='<span class="lab'+o+'">'+esc(r.l)+'</span><div class="tr '+r.cls+'"><i style="width:'+(r.c/max*100).toFixed(1)+'%"></i></div><span class="p'+o+'">'+pc(r.c,f.n)+'%</span>';}
+  bars+='</div>';
+  const pl=plates(f);
+  return head(f)+'<div class="sub">'+sub+'</div>'+bars+(pl.length?'<div class="facts">'+pl.map(t=>'<div class="f">'+t+'</div>').join('')+'</div>':'')+foot;
+}
+function renderC(f){
+  const sub=ORG[f.k]+' · '+esc(f.from)+' – '+esc(f.cut)+(f.sample?' · вибірка':'');
+  const [l0,c0]=f.top[0]||["—",0];
+  const next=f.top.slice(1,3).filter(([,c])=>pc(c,f.n)>=1).map(([l,c])=>esc(l)+' ('+pc(c,f.n)+'%)');
+  const hd=pc(c0,f.n)+'% вироків'+(next.length?' · далі '+next.join(' і '):'');
+  const col=l0.length>7;
+  const hero='<div class="t hero'+(col?' col':'')+'"><div style="display:flex;flex-direction:column;gap:10px"><div class="k">Найчастіше призначали</div><div class="d">'+hd+'</div></div><div class="v g">'+esc(l0)+'</div></div>';
+  const t1='<div class="t"><div class="k">Вироків</div><div class="v">'+num(f.n)+'</div><div class="d">обвинувальних, перша інстанція</div></div>';
+  let t2;
+  if(apOk(f))t2='<div class="t"><div class="k">Апеляція</div><div class="v">'+pc(f.apu,f.apk)+'%</div><div class="d">вироків апеляція залишила без змін</div></div>';
+  else if(zaOk(f))t2='<div class="t"><div class="k">Заочно</div><div class="v">'+pc(f.za,f.n)+'%</div><div class="d">'+num(f.za)+' з '+num(f.n)+' вироків</div></div>';
+  else if(sh(f.ug,f.n))t2='<div class="t"><div class="k">За угодою</div><div class="v">'+pc(f.ug,f.n)+'%</div><div class="d">'+num(f.ug)+' з '+num(f.n)+' вироків</div></div>';
+  else if(f.top[1]&&pc(f.top[1][1],f.n)>=1)t2='<div class="t"><div class="k">Також часто</div><div class="v">'+esc(f.top[1][0])+'</div><div class="d">'+pc(f.top[1][1],f.n)+'% вироків</div></div>';
+  else t2='<div class="t"><div class="k">Період</div><div class="v">'+(period(f)||'—')+'</div><div class="d">роки ухвалення вироків</div></div>';
+  return head(f)+'<div class="sub">'+sub+'</div><div class="tiles">'+hero+t1+t2+'</div>'+foot;
+}
+window.render=(f,v)=>{document.getElementById('card').innerHTML=v==='c'?renderC(f):renderA(f);return document.fonts.ready.then(()=>true)};
+</script></body></html>

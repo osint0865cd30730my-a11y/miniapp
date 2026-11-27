@@ -123,7 +123,11 @@ def write_outputs(data: str) -> None:
     sys.path.insert(0, str(ROOT / "bot"))
     from export_bot_json import export  # noqa: E402
     bot = export(ROOT / "index.html", ROOT / "bot.json")
+    sys.path.insert(0, str(ROOT / "tools"))
+    from cards import update as update_cards  # noqa: E402
+    cards_note = update_cards(bot)
     print(f"index.html: {len(pages) // 1024} КБ · dist/lexk-artifact.html · {bot.name}: {bot.stat().st_size // 1024} КБ · позицій: {len(d['p'])}")
+    print(cards_note)
 
 
 def main() -> int:

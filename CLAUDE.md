@@ -12,6 +12,7 @@
 | `data.json` | дані, що вбудовуються в застосунок | конвеєр бази знань «LEX_A» |
 | `data/referrals.json` | справи, передані на ОП ККС / палату ККС / ВП ВС (екран «Передано на ОП і ВП», попередження в позиціях і в перевірці посилань) | вручну, у репозиторії (див. нижче) |
 | `index.html`, `bot.json` | **результат збирання**, руками не редагувати | `tools/build.py` |
+| `cards/*.jpg`, `cards/index.json` | картки «Цифри дня» для каналу, результат збирання (шаблон `tools/card.html`, шрифти `tools/fonts/`) | `tools/build.py` → `tools/cards.py`, потрібен Playwright |
 | `dist/lexk-artifact.html` | результат збирання для артефакту (не в git) | `tools/build.py` |
 
 ## Порядок роботи
@@ -22,7 +23,7 @@
    `python3 tools/build.py --data-from шлях/до/зібраного.html`
    Скрипт бере звідти **лише дані**, а код лишає з `src/`. Якщо код у тій копії інший, скрипт зупиниться й покаже різницю в `dist/code-diff.txt`: перенесіть потрібне в `src/` і запустіть ще раз. `--force` — лише коли свідомо відкидаєте код тієї копії.
 4. **Перевірка**: `python3 tools/build.py --check` має сказати, що `index.html` зібрано з `src/` і `data.json`.
-5. **Викласти**: коміт `src/`, `data.json`, `data/`, `index.html`, `bot.json` у `main` (GitHub Pages оновиться за 1–2 хв). Потім **той самий результат** опублікувати в артефакт LEX_K: `dist/lexk-artifact.html` → Artifact publish з `url` артефакту «LEX_K Судова практика». Артефакт і Telegram завжди мають показувати одну версію.
+5. **Викласти**: коміт `src/`, `data.json`, `data/`, `index.html`, `bot.json`, `cards/` у `main` (GitHub Pages оновиться за 1–2 хв). Потім **той самий результат** опублікувати в артефакт LEX_K: `dist/lexk-artifact.html` → Artifact publish з `url` артефакту «LEX_K Судова практика». Артефакт і Telegram завжди мають показувати одну версію.
 6. Код бота — `bot/worker.js`; після зміни його треба вставити у воркер `lexa-bot` на Cloudflare і натиснути Deploy (робить власник).
 
 ## Передачі на ОП і ВП (`data/referrals.json`)
