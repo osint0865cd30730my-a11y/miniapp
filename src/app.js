@@ -328,6 +328,9 @@ const vrowAp = vi => { const x=G.V[vi], a=(G.ap||{})[vi], c=G.C[x[3]]; return '<
 const inReg = (vi,g) => g==="*"||G.C[G.V[vi][3]][1]===g;
 function partRows(p,g){ return p.r.filter(x=>inReg(x[0],g)); }
 // Повнота даних: скільки вироків знайдено і чому це не вся практика (згортається)
+// Вироки, що є в реєстрі, але їхній текст закрито (G.hid з експорту): у розбір не потрапили
+function hidNote(g){ const h=g&&g.hid; if(!h||!h.n) return "";
+  return 'Ще '+h.n+' '+(h.n%10===1&&h.n%100!==11?'вирок':h.n%10>=2&&h.n%10<=4&&(h.n%100<12||h.n%100>14)?'вироки':'вироків')+' є в реєстрі, але їхній текст закрито (не оприлюднено), тому тут їх не враховано'+(h.ap?' (з них в Апеляційній палаті — '+h.ap+')':'')+'. За роками: '+h.years.map(y=>y[0]+' — '+y[1]).join(", ")+'.'; }
 function complNote(){
   const id="compl|"+(G===GS?"sbu":G===GSP?"sbupre":G===GB?"beb":G===GD?"dbr":G===GN?"npu":"x"), open=S.sv===id;
   const closed=Object.values(G.arts||{}).reduce((n,a)=>n+(a.closed||0),0);
@@ -336,6 +339,7 @@ function complNote(){
     (G===GS?' Для справ за підслідністю СБУ після 24.02.2022 це відчутніше: доступ до вироків у справах про колабораційну діяльність і державну зраду обмежували масово, тож за ст. 111, 111-1, 111-2 вибірка може бути неповною.':'')+
     (G===GN?' Для поліції взято вибірку: до 100 останніх вироків першої інстанції за кожною категорією та апеляційні вироки, а не всі вироки.'+(G.interim?' Це проміжні дані: завантаження вироків поліції триває, числа ще зміняться.':''):'')+
     (G===GD?' За ст. 402 і 407 КК (непокора, СЗЧ) вироків тисячі, тому взято вибірку: 100 останніх вироків першої інстанції за кожною з цих статей.':'')+
+    (G.hid?' '+hidNote(G):'')+
     (closed?' У '+closed+' знайдених вироках текст закрито: відомий лише результат.':'')+
     ' Числа показують, як суди вирішували опубліковані справи, а не частку всіх справ.</div>':'')+'</div>';
 }
@@ -603,7 +607,7 @@ function vVaks(){
   const yc={}; g.V.forEach(v=>{const y=(v[1]||"").slice(-4); if(y) yc[y]=(yc[y]||0)+1;}); const ys=Object.keys(yc).sort(), mx=Math.max(...Object.values(yc));
   const sum=k=>arts.reduce((s,a)=>s+(g.arts[a][k]||0),0);
   return header("Покарання: ВАКС",S.tab!=="vaks")+'<div class="wrap">'+(S.inst==="all"?segVaks("vaks"):'')+
-   '<p class="note" style="margin-top:0">Вироки Вищого антикорупційного суду та Апеляційної палати у відкритих даних ДСА: <b>'+g.verdicts+'</b> (без повторних публікацій), '+g.from+' – '+g.cut+'. Вирок рахується за першою статтею Особливої частини КК у резолютивній частині.</p>'+
+   '<p class="note" style="margin-top:0">Вироки Вищого антикорупційного суду та Апеляційної палати у відкритих даних ДСА: <b>'+g.verdicts+'</b> (без повторних публікацій), '+g.from+' – '+g.cut+'. Вирок рахується за першою статтею Особливої частини КК у резолютивній частині.</p>'+(g.hid?'<div class="alert a-info"><b>Не вся практика ВАКС</b>'+esc(hidNote(g))+'</div>':'')+
    '<div class="sh">Статті <span class="badge b-ok">Дані ЄДРСР</span></div><div class="group">'+arts.map(a=>{const A=g.arts[a];return '<button class="row" data-a="sa" data-v="'+a+'"><span class="main"><span class="t">Ст. '+a+' КК</span>'+(ARTF[a]?'<div class="s">'+esc(ARTF[a])+'</div>':'')+'</span><span class="v">'+A.n+'</span><span class="chev">›</span></button>'}).join("")+'</div>'+
    '<div class="sh">Результат</div><div class="group">'+[["Обвинувальні вироки першої інстанції",sum("conv1")],["Виправдувальні",sum("acq")],["Частково виправдувальні",sum("part")],["Вироки Апеляційної палати",sum("appeal")]].map(r=>'<div class="row"><span class="main t" style="font-size:15px">'+r[0]+'</span><span class="v">'+r[1]+'</span></div>').join("")+'</div>'+
    '<div class="sh">Вироки за роками</div><div class="group"><div class="pad">'+ys.map(y=>'<div style="display:flex;align-items:center;gap:8px;margin:3px 0"><span class="num" style="width:40px;font-size:13px;color:var(--hint)">'+y+'</span><div class="stack mini" style="flex:1"><i class="c1" style="width:'+(yc[y]/mx*100)+'%"></i></div><span class="num" style="width:28px;text-align:right;font-size:13px">'+yc[y]+'</span></div>').join("")+'</div></div>'+
