@@ -266,14 +266,14 @@ const KS = D.k, KR = D.kr||{};
 let K = KS;
 // Ст. 111 за апеляційними округами: Сумщина — пілот із ручною перевіркою (D.k), інші округи — автоматичний розбір (D.kr)
 const kSet = r => { K = (r&&KR[r])||KS; return K; };
-const kr = () => K.auto?"|"+K.key:"";
+const kr = () => K!==KS?"|"+K.key:"";
 const K_ORD = ["kyiv","odesa","dnipro","kharkiv"];
 function k111List(){
   const row=(v,t,s)=>'<button class="row" data-a="p111" data-v="'+v+'"><span class="main"><span class="t">'+t+'</span><div class="s">'+s+'</div></span><span class="chev">›</span></button>';
   return '<div class="sh">Ст. 111 за апеляційними округами</div><div class="group">'+
    row("","Сумська область · Сумський апеляційний суд",KS.n.verdicts+' вироків 2024–2026, кожен звірено вручну: форма розгляду, апеляція, полон')+
-   K_ORD.filter(k=>KR[k]).map(k=>{const x=KR[k];return row(k,esc(x.name)+' · '+esc(x.court),x.n.verdicts+' вироків 2024–2026, автоматичний розбір')}).join("")+'</div>'+
-   '<p class="note">Сумщину звірено вручну. Інші округи розібрано автоматично за текстами з відкритих даних ДСА; перед цитуванням звіряйте з текстом вироку.</p>';
+   K_ORD.filter(k=>KR[k]).map(k=>{const x=KR[k];return row(k,esc(x.name)+' · '+esc(x.court),x.n.verdicts+' вироків 2024–2026, '+(x.auto?'автоматичний розбір':'кожен звірено вручну'))}).join("")+'</div>'+
+   (K_ORD.some(k=>KR[k]&&KR[k].auto)?'<p class="note">Позначені «автоматичний розбір» округи ще не звірено вручну: перед цитуванням звіряйте з текстом вироку.</p>':'');
 }
 const yr = n => n+" "+(n%10===1&&n%100!==11?"рік":[2,3,4].includes(n%10)&&![12,13,14].includes(n%100)?"роки":"років");
 const vrow = r => '<a class="row" href="https://reyestr.court.gov.ua/Review/'+r.id+'" target="_blank" rel="noopener"><span class="main"><span class="t" style="font-size:15px">'+esc(r.court)+'</span><div class="s">'+r.date+' · справа № '+esc(r.case)+'</div><div class="s">'+esc(r.short)+'</div>'+(r.ap?'<div class="s">Апеляція: '+esc(r.ap)+'</div>':'')+(r.note?'<div class="s" style="color:var(--warn)">'+esc(r.note)+'</div>':'')+'</span><span class="chev">↗</span></a>';
@@ -281,8 +281,8 @@ function sentHome111(){
   const n=K.n;
   return '<div class="sh">Ст. 111 КК · Державна зрада <span class="badge b-ok">Дані ЄДРСР</span></div>'+
    '<div class="group">'+["ч. 2","ч. 1"].filter(k=>K.parts[k]).map(k=>{const p=K.parts[k];return '<button class="row" data-a="sent" data-v="111|'+k+kr()+'"><span class="main"><span class="t">'+k+'</span><div class="s">'+p.persons+' '+(K.unit||"осіб")+' · '+esc(p.headline)+'</div></span><span class="chev">›</span></button>'}).join("")+
-   '<button class="row" data-a="slist" data-v="'+(K.auto?K.key:"")+'"><span class="main"><span class="t">Усі вироки</span><div class="s">'+n.verdicts+' вироків, з них '+n.acq+' виправдувальні й '+n.closed+' закриті'+(n.other?', '+n.other+' з іншим результатом':'')+'</div></span><span class="chev">›</span></button></div>'+
-   '<p class="note">'+esc(K.region)+', вироки '+esc(K.period)+', зріз '+K.cut+'. '+(K.auto?'Розбір автоматичний, за текстами з відкритих даних ДСА; вручну не звірено. ':'')+esc(K.official)+'</p>';
+   '<button class="row" data-a="slist" data-v="'+(K!==KS?K.key:"")+'"><span class="main"><span class="t">Усі вироки</span><div class="s">'+n.verdicts+' вироків, з них '+n.acq+' виправдувальні й '+n.closed+' закриті'+(n.other?', '+n.other+' з іншим результатом':'')+'</div></span><span class="chev">›</span></button></div>'+
+   '<p class="note">'+esc(K.region)+', вироки '+esc(K.period)+', зріз '+K.cut+'. '+(K.auto?'Розбір автоматичний, за текстами з відкритих даних ДСА; вручну не звірено. ':K.manual?'Кожен вирок звірено вручну '+esc(K.manual)+'. ':'')+esc(K.official)+'</p>';
 }
 function vSent111(k){
   const p=K.parts[k], tot=p.persons, un=K.unit||"осіб";
@@ -296,13 +296,13 @@ function vSent111(k){
    '<div class="sh">Як розглядали</div><div class="group">'+p.forms.map(f=>'<div class="row"><span class="main t" style="font-size:15px">'+esc(f[0])+'</span><span class="v">'+f[1]+'</span></div>').join("")+'</div>'+
    '<div class="sh">Інші наслідки</div><div class="group">'+p.other.map(f=>'<div class="row"><span class="main t" style="font-size:15px">'+esc(f[0])+'</span><span class="v">'+esc(String(f[1]))+'</span></div>').join("")+'</div>'+
    '<div class="sh">Апеляція · усі вироки за ст. 111</div><div class="group">'+K.appeal.map(f=>'<div class="row"><span class="main t" style="font-size:15px">'+esc(f[0])+'</span><span class="v">'+f[1]+'</span></div>').join("")+'</div>'+
-   '<p class="note">'+esc(K.region)+', вироки першої інстанції '+esc(K.period)+'. Вибірку зібрано за категорією справи в ЄДРСР, тому частина вироків за ст. 111 могла в неї не потрапити. Закриті тексти ('+K.n.closed+') не враховано.'+(K.auto?' Форму розгляду, конфіскацію, ознаки полону і результат апеляції визначено автоматично; результат апеляції — перше апеляційне рішення по суті після дати вироку.':'')+' Дані не є рекомендацією щодо міри покарання.</p></div>';
+   '<p class="note">'+esc(K.region)+', вироки першої інстанції '+esc(K.period)+'. Вибірку зібрано за категорією справи в ЄДРСР, тому частина вироків за ст. 111 могла в неї не потрапити. Закриті тексти ('+K.n.closed+') не враховано.'+(K.auto?' Форму розгляду, конфіскацію, ознаки полону і результат апеляції визначено автоматично; результат апеляції — перше апеляційне рішення по суті після дати вироку.':K.manual?' Кожен вирок і останні апеляційні ухвали в справі звірено вручну; «немає» означає, що апеляційного рішення по суті у відкритих даних немає, а не те, що вирок не оскаржували.':'')+' Дані не є рекомендацією щодо міри покарання.</p></div>';
   return h;
 }
 function vList111(r){
   kSet(r);
   const g=[["Обвинувальні",K.list.filter(r=>r.res==="conv")],["Виправдувальні",K.list.filter(r=>r.res==="acq")],["Текст закрито",K.list.filter(r=>r.res==="closed")],["Інший результат",K.list.filter(r=>r.res==="other")]];
-  return header("Вироки за ст. 111"+(K.auto?" · "+K.name:""),true)+'<div class="wrap"><p class="note" style="margin-top:0">'+esc(K.region)+' · '+esc(K.period)+' · зріз '+K.cut+'</p>'+
+  return header("Вироки за ст. 111"+(K!==KS?" · "+K.name:""),true)+'<div class="wrap"><p class="note" style="margin-top:0">'+esc(K.region)+' · '+esc(K.period)+' · зріз '+K.cut+'</p>'+
    g.map(([t,l])=>l.length?'<div class="sh">'+t+' · '+l.length+'</div><div class="group">'+l.map(vrow).join("")+'</div>':'').join("")+'</div>';
 }
 /* ===== Вироки за підслідністю СБУ: відкриті дані ДСА (D.g) ===== */
@@ -365,7 +365,7 @@ function vSentHome(){
    (S.per==="pre"&&G===GSP?apSum("sap","виправдувальні вироки і вироки з реальним позбавленням волі (без ст. 75 КК), ухвалені до 24.02.2022")+'<div class="sh">Касація</div><div class="group"><button class="row" data-a="kas" data-v="sbupre"><span class="main"><span class="t" style="font-size:15px">Постанови ККС у справах СБУ до 24.02.2022: де рішення скасовано або змінено</span></span><span class="chev">›</span></button></div>':'')+srcNote()+
    k111List()+'</div>';
 }
-function vPilot111(r){ kSet(r); return header(K.auto?"Ст. 111 · "+K.name:"Пілот: ст. 111, Сумщина",true)+'<div class="wrap">'+sentHome111()+'</div>'; }
+function vPilot111(r){ kSet(r); return header(K!==KS?"Ст. 111 · "+K.name:"Пілот: ст. 111, Сумщина",true)+'<div class="wrap">'+sentHome111()+'</div>'; }
 function partHead(p,g){ const rr=partRows(p,g), c=p.labels.map(()=>0); rr.forEach(x=>c[x[1]]++); const top=p.labels.map((l,k)=>[l,c[k]]).filter(x=>x[1]).sort((a,b)=>b[1]-a[1]).slice(0,2); return {t:rr.length,top}; }
 function vSentArt(a){
   const A=G.arts[a], g=S.reg, parts=Object.keys(A.parts);
@@ -550,7 +550,7 @@ function vCheck(){
    '<p class="note">Номер справи є лише в частини позицій бази ('+caseIdx.size+' справ), тому «немає в базі» трапляється й для справжніх постанов.</p></div>';
 }
 function vAbout(){
-  const rows=[["Позиції","Офіційні правові позиції ККС ВС і Великої Палати ВС у кримінальних справах: "+POS.length+" позицій, на які посилаються статті бази LEX_K."],["Тези","Короткий виклад позиції з бази LEX_K. Офіційний текст завжди показано поруч."],["Посилання","Кожна позиція веде на текст рішення в ЄДРСР."],["Відступи","Показано позначки бази правових позицій ВС: «з відступом» і «змінена»."],["Покарання і регіони","Вироки за підслідністю СБУ (ч. 2 ст. 216 КПК) з "+GS.from+": відкриті дані ДСА, ліцензія CC BY. Повторні публікації одного вироку відкинуто. Розбір резолютивної частини автоматичний, кожен вирок має посилання на ЄДРСР."],["Ст. 111 за округами","Вироки 2024–2026 рр. за апеляційними округами. Сумщину звірено вручну. Київ і Київська область, Одеська, Дніпропетровська, Харківська області — автоматичний розбір текстів із відкритих даних ДСА."],["Досудове","Питання досудового розслідування у справах СБУ з ключовими позиціями ВС; що ВС не вирішував — висновок бази LEX_K."],["Посилання у вироках","У картці позиції — вироки за підслідністю СБУ, у яких розпізнано номер справи, на якій стоїть позиція. Посилання не означає застосування висновку."],["Судді","Пошуку, фільтрів і статистики за суддями немає."],["Ваші запити","Пошук і перевірка працюють на пристрої, нічого не надсилається."]];
+  const rows=[["Позиції","Офіційні правові позиції ККС ВС і Великої Палати ВС у кримінальних справах: "+POS.length+" позицій, на які посилаються статті бази LEX_K."],["Тези","Короткий виклад позиції з бази LEX_K. Офіційний текст завжди показано поруч."],["Посилання","Кожна позиція веде на текст рішення в ЄДРСР."],["Відступи","Показано позначки бази правових позицій ВС: «з відступом» і «змінена»."],["Покарання і регіони","Вироки за підслідністю СБУ (ч. 2 ст. 216 КПК) з "+GS.from+": відкриті дані ДСА, ліцензія CC BY. Повторні публікації одного вироку відкинуто. Розбір резолютивної частини автоматичний, кожен вирок має посилання на ЄДРСР."],["Ст. 111 за округами","Вироки 2024–2026 рр. за апеляційними округами. Сумщину звірено вручну. Київ і Київська область, Одеська, Дніпропетровська, Харківська області — тексти з відкритих даних ДСА; звірені вручну округи позначено, решта — автоматичний розбір."],["Досудове","Питання досудового розслідування у справах СБУ з ключовими позиціями ВС; що ВС не вирішував — висновок бази LEX_K."],["Посилання у вироках","У картці позиції — вироки за підслідністю СБУ, у яких розпізнано номер справи, на якій стоїть позиція. Посилання не означає застосування висновку."],["Судді","Пошуку, фільтрів і статистики за суддями немає."],["Ваші запити","Пошук і перевірка працюють на пристрої, нічого не надсилається."]];
   return header("Про дані",true)+'<div class="wrap"><div class="group">'+rows.map(r=>'<div class="row"><span class="main"><span class="t">'+r[0]+'</span><div class="s" style="font-size:14px">'+r[1]+'</div></span></div>').join("")+'</div><p class="note">Зріз бази: '+CUT+'.</p></div>';
 }
 
