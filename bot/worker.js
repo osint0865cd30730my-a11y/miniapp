@@ -971,10 +971,14 @@ async function onInline(env, iq) {
 // «Опублікувати». Стан — у сховищі SUBS: ch:state (що вже було), ch:d:<id повідомлення> (чернетки, 7 днів).
 
 const BOT_LINK = "https://t.me/lexa_praktyka_bot";
-const CH_DAYS = [1, 2, 3, 4, 5];  // дні тижня, коли бот готує чернетки (1 — понеділок, 0 — неділя)
+const CH_DAYS = [1, 2, 3, 4, 5];  // будні (1 — понеділок, 0 — неділя): зранку «Позиція дня», вдень «Цифра дня»
 const CH_NOON_UTC = 10;           // запуск за розкладом до цієї години UTC вважається ранковим
 const CH_DRAFT_TTL = 7 * 24 * 3600;
-const CH_NAMES = { pos: "Позиція дня", fact: "Цифра дня", week: "Тижневий огляд", own: "Свій пост" };
+// Вихідні й свята: один пост зранку. Субота — «Справа тижня», неділя — вікторина, свято — «Позиція, яку варто знати».
+// Державні свята (ММ-ДД); додаткові дати — змінна CH_HOLIDAYS, дні без жодних постів (жалоба тощо) — CH_QUIET
+// (через кому, ММ-ДД або РРРР-ММ-ДД).
+const CH_HOLIDAYS = ["01-01", "06-28", "07-15", "08-24", "10-01", "12-25"];
+const CH_NAMES = { pos: "Позиція дня", fact: "Цифра дня", week: "Тижневий огляд", case: "Справа тижня", quiz: "Вікторина", own: "Свій пост" };
 const FACT_WHO = {
   sbu: "у справах за підслідністю СБУ", nabu: "Вищого антикорупційного суду (справи НАБУ і САП)",
   dbr: "у справах за підслідністю ДБР", beb: "у справах за підслідністю БЕБ", police: "у справах Національної поліції",
@@ -988,20 +992,23 @@ function channelLink(env) {
 }
 async function chState(env) {
   const st = (await env.SUBS.get("ch:state", "json")) || {};
-  return { pos: st.pos || [], fact: st.fact || [], weekAt: st.weekAt || "" };
+  return { pos: st.pos || [], fact: st.fact || [], quiz: st.quiz || [], weekAt: st.weekAt || "" };
 }
 const chBotRow = () => [{ text: "Бот: пошук і перевірка посилань", url: BOT_LINK }];
 const pct = (c, n) => Math.round(c / n * 100) + "%";
 const artTag = a => "#" + a.replace(/^ст\.\s*/i, "ст").replace(/[^\p{L}\d]+/gu, "_").replace(/_+$/, "");
 const isoMinus = (iso, days) => new Date(Date.parse(iso + "T00:00:00Z") - days * 864e5).toISOString().slice(0, 10);
 
-// «Позиція дня»: найновіша в базі ВС позиція, якої ще не було в каналі. Змінені позиції, ті, від яких ВС відступив,
-// і ті, питання за якими передано на ОП чи ВП, не пропонуємо.
-function posDraft(data, st, tried = []) {
+// Позиція, яку можна дати в канал: ще не була там, не змінена, від неї не відступили і питання не передано на ОП чи ВП.
+function posPool(data, st, tried) {
   const skip = new Set([...st.pos, ...tried]), dep = depMap(data), ref = refMap(data);
-  const ok = p => !skip.has(p.i) && p.m !== "modified" &&
-    !p._cases.some(c => (dep.get(c) || []).some(q => q !== p) || (ref.get(c) || []).length);
-  const pool = data.p.filter(ok).sort((a, b) => (b.a || "").localeCompare(a.a || "") || pdate(b).localeCompare(pdate(a)));
+  return data.p.filter(p => !skip.has(p.i) && p.m !== "modified" &&
+    !p._cases.some(c => (dep.get(c) || []).some(q => q !== p) || (ref.get(c) || []).length));
+}
+
+// «Позиція дня»: найновіша в базі ВС позиція, якої ще не було в каналі.
+function posDraft(data, st, tried = []) {
+  const pool = posPool(data, st, tried).sort((a, b) => (b.a || "").localeCompare(a.a || "") || pdate(b).localeCompare(pdate(a)));
   const p = pool.find(p => p.h) || pool[0];
   if (!p) return null;
   const arts = p.r.slice(0, 3);
@@ -1012,6 +1019,49 @@ function posDraft(data, st, tried = []) {
   const row = [{ text: "Відкрити в LEX_K", url: appLinkFor(p) }];
   if (edrsr(p)) row.push({ text: "Рішення в ЄДРСР ↗", url: edrsr(p) });
   return { kind: "pos", key: p.i, text, mode: "HTML", kb: [row, chBotRow()] };
+}
+
+// «Справа тижня» (субота) і «Позиція, яку варто знати» (свята): спершу постанови Великої Палати, далі ККС —
+// питання, відповідь ВС, повний текст позиції. Фабули справ у базі немає, тож пост будується з самої позиції.
+function caseDraft(data, st, tried = [], holiday = false) {
+  const pool = posPool(data, st, tried).filter(p => p.h && p.t)
+    .sort((a, b) => (b.c === "ВП") - (a.c === "ВП") || pdate(b).localeCompare(pdate(a)));
+  const p = pool[0];
+  if (!p) return null;
+  const arts = p.r.slice(0, 3);
+  let text = "<b>" + (holiday ? "Позиція, яку варто знати" : "Справа тижня") + "</b> · " + esc(court(p)) +
+    "\n\n<b>Питання.</b> " + esc(cut(p.t, 500)) + "\n\n<b>Відповідь ВС.</b> " + esc(cut(p.h, 900));
+  if (p.x) text += "\n\n<blockquote expandable>" + esc(cut(p.x, 1800)) + "</blockquote>";
+  text += "\n<i>" + esc(mark(p) + meta(p)) + "</i>" +
+    "\n\nВисновки ВС щодо застосування норм права суди враховують при вирішенні подібних справ (ч. 6 ст. 13 Закону «Про судоустрій і статус суддів»). Збережіть, щоб мати під рукою.";
+  if (arts.length) text += "\n\n" + arts.map(artTag).join(" ");
+  const row = [{ text: "Відкрити в LEX_K", url: appLinkFor(p) }];
+  if (edrsr(p)) row.push({ text: "Рішення в ЄДРСР ↗", url: edrsr(p) });
+  return { kind: "case", key: p.i, holiday, text, mode: "HTML", kb: [row, chBotRow()] };
+}
+
+// Неділя — вікторина (квіз Telegram) на даних «Цифри дня»: яке покарання найчастіше призначають за частиною статті.
+// Варіанти — три найчастіші покарання з вироків, правильний — перше; пояснення з частками відкривається після відповіді.
+const FACT_ORG = { sbu: "справи СБУ", dbr: "справи ДБР", beb: "справи БЕБ", nabu: "справи НАБУ і САП", police: "справи Нацполіції" };
+function quizDraft(data, st, tried = []) {
+  const ok = f => f.top.length >= 3 && f.top.slice(0, 3).every(([, c]) => c / f.n >= 0.01) && f.top[0][1] > f.top[1][1];
+  const all = (data.f || []).filter(ok);
+  const skip = new Set(tried);
+  const f = all.find(f => !st.quiz.includes(f.id) && !skip.has(f.id)) || all.find(f => !skip.has(f.id));
+  if (!f) return null;
+  const top = f.top.slice(0, 3);
+  // порядок варіантів сталий для заготовки, але правильний не завжди перший
+  const seed = [...f.id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7), shift = seed % 3;
+  const options = [0, 1, 2].map(i => top.at((i + shift) % 3)[0]);
+  const correct = options.indexOf(top[0][0]);
+  const question = "Яке покарання найчастіше призначають за " + f.p + " ст. " + f.a + " КК? (" + FACT_ORG[f.k] + ", " + f.n + " " +
+    plural(f.n, "вирок", "вироки", "вироків") + (f.sample ? ", вибірка" : "") + ")";
+  let explanation = top.map(([l, c]) => l + " — " + pct(c, f.n)).join("; ") + ". Відкриті дані ЄДРСР, не прогноз покарання.";
+  if (explanation.length > 200) explanation = top.map(([l, c]) => l + " — " + pct(c, f.n)).join("; ") + ".";
+  const text = "<b>Вікторина</b>\n\n" + esc(question) + "\n\nВаріанти: " + options.map((o, i) => (i === correct ? "<b>" + esc(o) + "</b> ✓" : esc(o))).join(" · ") +
+    "\n<i>Пояснення після відповіді:</i> " + esc(explanation);
+  return { kind: "quiz", key: f.id, text, mode: "HTML", poll: { question: question.slice(0, 300), options, correct, explanation },
+    kb: [[{ text: "Покарання в LEX_K", url: APP_LINK }], chBotRow()] };
 }
 
 // «Цифра дня»: готовий підрахунок з розділу «Покарання» (поле f у bot.json), по одному на частину статті.
@@ -1072,11 +1122,12 @@ function weekDraft(data, st) {
 }
 
 function makeDraft(kind, data, st, tried) {
-  return kind === "pos" ? posDraft(data, st, tried) : kind === "fact" ? factDraft(data, st, tried) : kind === "week" ? weekDraft(data, st) : null;
+  return kind === "pos" ? posDraft(data, st, tried) : kind === "fact" ? factDraft(data, st, tried) : kind === "week" ? weekDraft(data, st)
+    : kind === "case" ? caseDraft(data, st, tried) : kind === "quiz" ? quizDraft(data, st, tried) : null;
 }
 const chControls = d => [[
   { text: "✅ Опублікувати", callback_data: "ch:pub" },
-  ...(d.kind === "pos" || d.kind === "fact" ? [{ text: "🔁 Інший", callback_data: "ch:alt" }] : []),
+  ...(["pos", "fact", "case", "quiz"].includes(d.kind) ? [{ text: "🔁 Інший", callback_data: "ch:alt" }] : []),
   { text: "✖ Пропустити", callback_data: "ch:skip" },
 ]];
 // текст поста: HTML від бота або текст власника з його ж форматуванням (entities). Пост із картинкою (d.photo) —
@@ -1088,7 +1139,12 @@ const chBody = d => d.photo
   : (d.mode === "HTML" ? { text: d.text, parse_mode: "HTML" } : { text: d.text, entities: d.entities || [] });
 const chMsg = (d, extraRows) => ({ ...chBody(d), ...(d.photo ? { photo: d.photo } : { link_preview_options: { is_disabled: true } }),
   reply_markup: { inline_keyboard: [...d.kb, ...(extraRows || [])] } });
-const chSend = (env, chatId, d, extraRows) => tg(env, d.photo ? "sendPhoto" : "sendMessage", { chat_id: chatId, ...chMsg(d, extraRows) });
+const chSend = (env, chatId, d, extraRows) => d.poll && chatId === env.CHANNEL
+  // у канал вікторина йде справжнім квізом Telegram; власникові — текстом із правильною відповіддю, щоб перевірити й не проголосувати випадково
+  ? tg(env, "sendPoll", { chat_id: chatId, question: d.poll.question, options: d.poll.options.map(text => ({ text })), type: "quiz",
+      correct_option_id: d.poll.correct, explanation: d.poll.explanation, is_anonymous: true,
+      reply_markup: { inline_keyboard: [...d.kb, ...(extraRows || [])] } })
+  : tg(env, d.photo ? "sendPhoto" : "sendMessage", { chat_id: chatId, ...chMsg(d, extraRows) });
 const putDraft = (env, mid, d) => env.SUBS.put("ch:d:" + mid, JSON.stringify(d), { expirationTtl: CH_DRAFT_TTL });
 
 // Надсилає власникові чернетку: той самий вигляд, що буде в каналі, плюс рядок керування.
@@ -1102,17 +1158,24 @@ async function sendDraft(env, d) {
   return r;
 }
 
-// Запуск за розкладом: зранку «Позиція дня», вдень «Цифра дня», у п'ятницю вдень «Тижневий огляд» (якщо є що оглядати).
+// Запуск за розкладом. Будні: зранку «Позиція дня», вдень «Цифра дня», у п'ятницю вдень «Тижневий огляд» (якщо є що оглядати).
+// Субота — «Справа тижня», неділя — вікторина, свято — «Позиція, яку варто знати»: лише ранковий запуск. CH_QUIET — без постів.
 async function channelTick(env, when) {
   if (!chReady(env)) return { skipped: "канал не налаштовано" };
-  const day = when.getUTCDay();
-  if (!CH_DAYS.includes(day)) return { skipped: "вихідний" };
+  const day = when.getUTCDay(), ymd = when.toISOString().slice(0, 10), md = ymd.slice(5);
+  const listed = v => String(v || "").split(/[\s,;]+/).filter(Boolean).some(x => x === ymd || x === md);
+  if (listed(env.CH_QUIET)) return { skipped: "день без постів" };
+  const holiday = CH_HOLIDAYS.includes(md) || listed(env.CH_HOLIDAYS), workday = CH_DAYS.includes(day) && !holiday;
   const slot = when.getUTCHours() < CH_NOON_UTC ? "am" : "pm";
-  const tick = "ch:tick:" + when.toISOString().slice(0, 10) + ":" + slot;
+  if (!workday && slot === "pm") return { skipped: "вихідний: лише ранковий пост" };
+  const tick = "ch:tick:" + ymd + ":" + slot;
   if (await env.SUBS.get(tick)) return { skipped: "уже було" };
   await env.SUBS.put(tick, "1", { expirationTtl: 2 * 24 * 3600 });
   const data = await loadData(env), st = await chState(env);
-  let d = slot === "am" ? posDraft(data, st) : (day === 5 && weekDraft(data, st)) || factDraft(data, st);
+  let d = holiday ? caseDraft(data, st, [], true)
+    : day === 6 ? caseDraft(data, st)
+    : day === 0 ? quizDraft(data, st) || caseDraft(data, st)
+    : slot === "am" ? posDraft(data, st) : (day === 5 && weekDraft(data, st)) || factDraft(data, st);
   if (!d) return { draft: null };
   const r = await sendDraft(env, d);
   return { draft: d.kind, key: d.key, ok: !!r.ok };
@@ -1130,13 +1193,17 @@ async function sendChannelMenu(env, chatId) {
       "\nЩоб виправити текст, відповідайте на чернетку (reply) новим текстом. Свій пост: <code>/post текст</code>."
     : "Бот не бачить канал <code>" + esc(env.CHANNEL) + "</code>: " + esc(ch.description || "помилка") + ".\nДодайте бота адміністратором каналу з правом публікувати повідомлення і перевірте змінну CHANNEL.";
   return tg(env, "sendMessage", { chat_id: chatId, text, parse_mode: "HTML",
-    reply_markup: ch.ok ? { inline_keyboard: [[{ text: "Позиція дня", callback_data: "ch:new:pos" }, { text: "Цифра дня", callback_data: "ch:new:fact" }], [{ text: "Тижневий огляд", callback_data: "ch:new:week" }]] } : undefined });
+    reply_markup: ch.ok ? { inline_keyboard: [[{ text: "Позиція дня", callback_data: "ch:new:pos" }, { text: "Цифра дня", callback_data: "ch:new:fact" }], [{ text: "Тижневий огляд", callback_data: "ch:new:week" }], [{ text: "Справа тижня", callback_data: "ch:new:case" }, { text: "Вікторина", callback_data: "ch:new:quiz" }]] } : undefined });
 }
 
 // Власник відповів на чернетку новим текстом — замінюємо текст, кнопки лишаються.
 async function editDraft(env, msg) {
   const mid = msg.reply_to_message.message_id, d = await env.SUBS.get("ch:d:" + mid, "json");
   if (!d) return false;
+  if (d.poll) {
+    await tg(env, "sendMessage", { chat_id: msg.chat.id, text: "Текст вікторини не редагується: питання й варіанти беруться з даних. Натисніть «Інший» або «Пропустити»." });
+    return true;
+  }
   Object.assign(d, { text: msg.text, mode: "ent", entities: msg.entities || [] });
   if (d.photo && msg.text.length > CAPTION_MAX) {
     await tg(env, "sendMessage", { chat_id: msg.chat.id, text: "Підпис до картинки — до " + CAPTION_MAX + " символів, а в тексті " + msg.text.length + ". Скоротіть і надішліть ще раз." });
@@ -1165,7 +1232,7 @@ async function onChannelCallback(env, cq) {
   const answer = (text, alert) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text, show_alert: !!alert });
   if (act === "noop") return answer();
   if (!isOwner(env, cq.from.id) || !chReady(env) || !cq.message) return answer("Керувати каналом може лише власник бота.", true);
-  const nk = /^new:(pos|fact|week)$/.exec(act);
+  const nk = /^new:(pos|fact|week|case|quiz)$/.exec(act);
   if (nk) {
     const d = makeDraft(nk[1], await loadData(env), await chState(env));
     if (!d) return answer(nk[1] === "week" ? "Після попереднього огляду нового в базі немає." : "Немає чого запропонувати.", true);
@@ -1181,7 +1248,12 @@ async function onChannelCallback(env, cq) {
   };
   const remember = async () => {
     const st = await chState(env);
-    if (d.kind === "pos" && !st.pos.includes(d.key)) st.pos.push(d.key);
+    if ((d.kind === "pos" || d.kind === "case") && !st.pos.includes(d.key)) st.pos.push(d.key);
+    if (d.kind === "quiz") {
+      if (!st.quiz.includes(d.key)) st.quiz.push(d.key);
+      const fs = (await loadData(env)).f || [];
+      if (fs.length && fs.every(f => st.quiz.includes(f.id))) st.quiz = [];
+    }
     if (d.kind === "fact") {
       if (!st.fact.includes(d.key)) st.fact.push(d.key);
       const all = (await loadData(env)).f || [];
@@ -1203,10 +1275,10 @@ async function onChannelCallback(env, cq) {
     await answer("Пропущено");
     return done("✖ Не опубліковано");
   }
-  if (act === "alt" && (d.kind === "pos" || d.kind === "fact")) {
+  if (act === "alt" && ["pos", "fact", "case", "quiz"].includes(d.kind)) {
     await remember(); // «Інший» означає «цей не публікуємо»: відхилений варіант завтра не повернеться
     const tried = [...(d.tried || []), d.key];
-    const n = makeDraft(d.kind, await loadData(env), await chState(env), tried);
+    const n = d.kind === "case" ? caseDraft(await loadData(env), await chState(env), tried, !!d.holiday) : makeDraft(d.kind, await loadData(env), await chState(env), tried);
     if (!n) return answer("Інших варіантів зараз немає.", true);
     n.tried = tried;
     // нова чернетка замість старої: з картинкою й без неї повідомлення різних типів, тож не редагуємо, а замінюємо
