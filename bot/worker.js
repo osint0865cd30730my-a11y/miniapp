@@ -978,6 +978,7 @@ const CH_DRAFT_TTL = 7 * 24 * 3600;
 // Державні свята (ММ-ДД); додаткові дати — змінна CH_HOLIDAYS, дні без жодних постів (жалоба тощо) — CH_QUIET
 // (через кому, ММ-ДД або РРРР-ММ-ДД).
 const CH_HOLIDAYS = ["01-01", "06-28", "07-15", "08-24", "10-01", "12-25"];
+const CH_WEEKEND_UTC = 8; // субота й неділя: пост лише з окремого запуску о 08:30 UTC (10:30 за Києвом узимку), ранковий 07:45 пропускаємо
 const CH_NAMES = { pos: "Позиція дня", fact: "Цифра дня", week: "Тижневий огляд", case: "Справа тижня", quiz: "Вікторина", own: "Свій пост" };
 const FACT_WHO = {
   sbu: "у справах за підслідністю СБУ", nabu: "Вищого антикорупційного суду (справи НАБУ і САП)",
@@ -1168,6 +1169,8 @@ async function channelTick(env, when) {
   const holiday = CH_HOLIDAYS.includes(md) || listed(env.CH_HOLIDAYS), workday = CH_DAYS.includes(day) && !holiday;
   const slot = when.getUTCHours() < CH_NOON_UTC ? "am" : "pm";
   if (!workday && slot === "pm") return { skipped: "вихідний: лише ранковий пост" };
+  const weekend = day === 6 || day === 0;
+  if (weekend && when.getUTCHours() !== CH_WEEKEND_UTC) return { skipped: "вихідний: пост о 10:30" };
   const tick = "ch:tick:" + ymd + ":" + slot;
   if (await env.SUBS.get(tick)) return { skipped: "уже було" };
   await env.SUBS.put(tick, "1", { expirationTtl: 2 * 24 * 3600 });
