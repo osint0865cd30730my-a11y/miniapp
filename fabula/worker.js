@@ -252,9 +252,16 @@ export default {
         ],
         scope: { type: 'chat', chat_id: Number(env.OWNER_ID) || 0 },
       });
+      // Поки OWNER_ID не вписано: підказати id власника каналу (creator) з адміністраторів.
+      let ownerHint = null;
+      if (!env.OWNER_ID && env.CHANNEL) {
+        const adm = await tg(env, 'getChatAdministrators', { chat_id: env.CHANNEL });
+        const creator = adm.ok && adm.result.find((a) => a.status === 'creator');
+        ownerHint = creator ? String(creator.user.id) : (adm.description || null);
+      }
       let queue = null;
       try { queue = (await loadQueue(env)).length; } catch (e) { queue = String(e.message); }
-      return Response.json({ webhook: wh.ok, commands: cmd.ok, channel: env.CHANNEL || null, owner: !!env.OWNER_ID, kv: !!env.STATE, queue });
+      return Response.json({ webhook: wh.ok, commands: cmd.ok, channel: env.CHANNEL || null, owner: !!env.OWNER_ID, owner_hint: ownerHint, kv: !!env.STATE, queue });
     }
     if (url.pathname === '/hook' && request.method === 'POST') {
       if (request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== (await webhookSecret(env.BOT_TOKEN))) return new Response('forbidden', { status: 403 });
