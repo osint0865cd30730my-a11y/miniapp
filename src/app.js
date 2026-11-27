@@ -262,21 +262,33 @@ function vPos(id){
 
 /* ===== Макети: регіони, покарання, досудове ===== */
 /* ===== Ст. 111: справжні дані пілоту з ЄДРСР ===== */
-const K = D.k;
+const KS = D.k, KR = D.kr||{};
+let K = KS;
+// Ст. 111 за апеляційними округами: Сумщина — пілот із ручною перевіркою (D.k), інші округи — автоматичний розбір (D.kr)
+const kSet = r => { K = (r&&KR[r])||KS; return K; };
+const kr = () => K.auto?"|"+K.key:"";
+const K_ORD = ["kyiv","odesa","dnipro","kharkiv"];
+function k111List(){
+  const row=(v,t,s)=>'<button class="row" data-a="p111" data-v="'+v+'"><span class="main"><span class="t">'+t+'</span><div class="s">'+s+'</div></span><span class="chev">›</span></button>';
+  return '<div class="sh">Ст. 111 за апеляційними округами</div><div class="group">'+
+   row("","Сумська область · Сумський апеляційний суд",KS.n.verdicts+' вироків 2024–2026, кожен звірено вручну: форма розгляду, апеляція, полон')+
+   K_ORD.filter(k=>KR[k]).map(k=>{const x=KR[k];return row(k,esc(x.name)+' · '+esc(x.court),x.n.verdicts+' вироків 2024–2026, автоматичний розбір')}).join("")+'</div>'+
+   '<p class="note">Сумщину звірено вручну. Інші округи розібрано автоматично за текстами з відкритих даних ДСА; перед цитуванням звіряйте з текстом вироку.</p>';
+}
 const yr = n => n+" "+(n%10===1&&n%100!==11?"рік":[2,3,4].includes(n%10)&&![12,13,14].includes(n%100)?"роки":"років");
-const vrow = r => '<a class="row" href="https://reyestr.court.gov.ua/Review/'+r.id+'" target="_blank" rel="noopener"><span class="main"><span class="t" style="font-size:15px">'+esc(r.court)+'</span><div class="s">'+r.date+' · справа № '+esc(r.case)+'</div><div class="s">'+esc(r.short)+'</div>'+(r.note?'<div class="s" style="color:var(--warn)">'+esc(r.note)+'</div>':'')+'</span><span class="chev">↗</span></a>';
+const vrow = r => '<a class="row" href="https://reyestr.court.gov.ua/Review/'+r.id+'" target="_blank" rel="noopener"><span class="main"><span class="t" style="font-size:15px">'+esc(r.court)+'</span><div class="s">'+r.date+' · справа № '+esc(r.case)+'</div><div class="s">'+esc(r.short)+'</div>'+(r.ap?'<div class="s">Апеляція: '+esc(r.ap)+'</div>':'')+(r.note?'<div class="s" style="color:var(--warn)">'+esc(r.note)+'</div>':'')+'</span><span class="chev">↗</span></a>';
 function sentHome111(){
   const n=K.n;
   return '<div class="sh">Ст. 111 КК · Державна зрада <span class="badge b-ok">Дані ЄДРСР</span></div>'+
-   '<div class="group">'+["ч. 2","ч. 1"].map(k=>{const p=K.parts[k];return '<button class="row" data-a="sent" data-v="111|'+k+'"><span class="main"><span class="t">'+k+'</span><div class="s">'+p.persons+' осіб · '+esc(p.headline)+'</div></span><span class="chev">›</span></button>'}).join("")+
-   '<button class="row" data-a="go" data-v="sentlist"><span class="main"><span class="t">Усі вироки</span><div class="s">'+n.verdicts+' вироків, з них '+n.acq+' виправдувальні й '+n.closed+' закриті</div></span><span class="chev">›</span></button></div>'+
-   '<p class="note">'+esc(K.region)+', вироки '+esc(K.period)+', зріз '+K.cut+'. Інших областей ще немає. '+esc(K.official)+'</p>';
+   '<div class="group">'+["ч. 2","ч. 1"].filter(k=>K.parts[k]).map(k=>{const p=K.parts[k];return '<button class="row" data-a="sent" data-v="111|'+k+kr()+'"><span class="main"><span class="t">'+k+'</span><div class="s">'+p.persons+' '+(K.unit||"осіб")+' · '+esc(p.headline)+'</div></span><span class="chev">›</span></button>'}).join("")+
+   '<button class="row" data-a="slist" data-v="'+(K.auto?K.key:"")+'"><span class="main"><span class="t">Усі вироки</span><div class="s">'+n.verdicts+' вироків, з них '+n.acq+' виправдувальні й '+n.closed+' закриті'+(n.other?', '+n.other+' з іншим результатом':'')+'</div></span><span class="chev">›</span></button></div>'+
+   '<p class="note">'+esc(K.region)+', вироки '+esc(K.period)+', зріз '+K.cut+'. '+(K.auto?'Розбір автоматичний, за текстами з відкритих даних ДСА; вручну не звірено. ':'')+esc(K.official)+'</p>';
 }
 function vSent111(k){
-  const p=K.parts[k], tot=p.persons;
+  const p=K.parts[k], tot=p.persons, un=K.unit||"осіб";
   let h=header(k+" ст. 111 КК",true)+'<div class="wrap">'+
    '<div class="sh">Санкція</div><div class="group"><div class="pad body">'+esc(p.sanction)+'</div></div>'+
-   '<div class="sh">Призначено · '+tot+' осіб</div><div class="group">'+p.values.map((v,i)=>{const open=S.sv===k+i;
+   '<div class="sh">Призначено · '+tot+' '+un+'</div><div class="group">'+p.values.map((v,i)=>{const open=S.sv===k+i;
      return '<button class="row" data-a="sv" data-v="'+k+i+'"><span class="main"><span class="t">'+esc(v.label)+'</span>'+(v.note?'<div class="s">'+esc(v.note)+'</div>':'')+
      '<div class="stack mini" style="margin-top:7px"><i class="c3" style="width:'+(v.n/tot*100)+'%"></i></div></span><span class="v">'+v.n+'</span><span class="chev">'+(open?'⌄':'›')+'</span></button>'+(open?v.rows.map(vrow).join(""):"")}).join("")+'</div>'+
    (p.hint?'<div class="alert a-info"><b>Що це означає</b>'+esc(p.hint)+'</div>':'')+
@@ -284,12 +296,13 @@ function vSent111(k){
    '<div class="sh">Як розглядали</div><div class="group">'+p.forms.map(f=>'<div class="row"><span class="main t" style="font-size:15px">'+esc(f[0])+'</span><span class="v">'+f[1]+'</span></div>').join("")+'</div>'+
    '<div class="sh">Інші наслідки</div><div class="group">'+p.other.map(f=>'<div class="row"><span class="main t" style="font-size:15px">'+esc(f[0])+'</span><span class="v">'+esc(String(f[1]))+'</span></div>').join("")+'</div>'+
    '<div class="sh">Апеляція · усі вироки за ст. 111</div><div class="group">'+K.appeal.map(f=>'<div class="row"><span class="main t" style="font-size:15px">'+esc(f[0])+'</span><span class="v">'+f[1]+'</span></div>').join("")+'</div>'+
-   '<p class="note">'+esc(K.region)+', вироки першої інстанції '+esc(K.period)+'. Вибірку зібрано за категорією справи в ЄДРСР, тому частина вироків за ст. 111 могла в неї не потрапити. Закриті тексти ('+K.n.closed+') не враховано. Дані не є рекомендацією щодо міри покарання.</p></div>';
+   '<p class="note">'+esc(K.region)+', вироки першої інстанції '+esc(K.period)+'. Вибірку зібрано за категорією справи в ЄДРСР, тому частина вироків за ст. 111 могла в неї не потрапити. Закриті тексти ('+K.n.closed+') не враховано.'+(K.auto?' Форму розгляду, конфіскацію, ознаки полону і результат апеляції визначено автоматично; результат апеляції — перше апеляційне рішення по суті після дати вироку.':'')+' Дані не є рекомендацією щодо міри покарання.</p></div>';
   return h;
 }
-function vList111(){
-  const g=[["Обвинувальні",K.list.filter(r=>r.res==="conv")],["Виправдувальні",K.list.filter(r=>r.res==="acq")],["Текст закрито",K.list.filter(r=>r.res==="closed")]];
-  return header("Вироки за ст. 111",true)+'<div class="wrap"><p class="note" style="margin-top:0">'+esc(K.region)+' · '+esc(K.period)+' · зріз '+K.cut+'</p>'+
+function vList111(r){
+  kSet(r);
+  const g=[["Обвинувальні",K.list.filter(r=>r.res==="conv")],["Виправдувальні",K.list.filter(r=>r.res==="acq")],["Текст закрито",K.list.filter(r=>r.res==="closed")],["Інший результат",K.list.filter(r=>r.res==="other")]];
+  return header("Вироки за ст. 111"+(K.auto?" · "+K.name:""),true)+'<div class="wrap"><p class="note" style="margin-top:0">'+esc(K.region)+' · '+esc(K.period)+' · зріз '+K.cut+'</p>'+
    g.map(([t,l])=>l.length?'<div class="sh">'+t+' · '+l.length+'</div><div class="group">'+l.map(vrow).join("")+'</div>':'').join("")+'</div>';
 }
 /* ===== Вироки за підслідністю СБУ: відкриті дані ДСА (D.g) ===== */
@@ -350,9 +363,9 @@ function vSentHome(){
    '<div class="sh">Вироки за підслідністю СБУ · '+esc(rname(S.reg))+' <span class="badge b-ok">Дані ЄДРСР</span></div><div class="group">'+
    arts.map(a=>{const n=artCount(a);const n2=S.reg2?artCountG(a,S.reg2):0;return (n||n2)?'<button class="row" data-a="sa" data-v="'+a+'"><span class="main"><span class="t">Ст. '+a+' КК</span>'+(ARTF[a]?'<div class="s">'+esc(ARTF[a])+'</div>':'')+'</span>'+two(n,n2)+'<span class="chev">›</span></button>':''}).join("")+'</div>'+
    (S.per==="pre"&&G===GSP?apSum("sap","виправдувальні вироки і вироки з реальним позбавленням волі (без ст. 75 КК), ухвалені до 24.02.2022")+'<div class="sh">Касація</div><div class="group"><button class="row" data-a="kas" data-v="sbupre"><span class="main"><span class="t" style="font-size:15px">Постанови ККС у справах СБУ до 24.02.2022: де рішення скасовано або змінено</span></span><span class="chev">›</span></button></div>':'')+srcNote()+
-   '<div class="sh">Пілот із ручною перевіркою</div><div class="group"><button class="row" data-a="go" data-v="pilot111"><span class="main"><span class="t">Ст. 111 · суди Сумської області</span><div class="s">'+K.n.verdicts+' вироків 2024–2026, кожен звірено вручну: форма розгляду, апеляція, полон</div></span><span class="chev">›</span></button></div></div>';
+   k111List()+'</div>';
 }
-function vPilot111(){ return header("Пілот: ст. 111, Сумщина",true)+'<div class="wrap">'+sentHome111()+'</div>'; }
+function vPilot111(r){ kSet(r); return header(K.auto?"Ст. 111 · "+K.name:"Пілот: ст. 111, Сумщина",true)+'<div class="wrap">'+sentHome111()+'</div>'; }
 function partHead(p,g){ const rr=partRows(p,g), c=p.labels.map(()=>0); rr.forEach(x=>c[x[1]]++); const top=p.labels.map((l,k)=>[l,c[k]]).filter(x=>x[1]).sort((a,b)=>b[1]-a[1]).slice(0,2); return {t:rr.length,top}; }
 function vSentArt(a){
   const A=G.arts[a], g=S.reg, parts=Object.keys(A.parts);
@@ -433,7 +446,7 @@ function vSentPart(v){
   if(t) h+='<div class="group"><button class="row" data-a="sim" data-v="'+esc(v)+'"><span class="main"><span class="t">Підібрати схожі вироки</span><div class="s">Позначте ознаки своєї справи — область, угода, заочний розгляд, ст. 69, ст. 75, конфіскація</div></span><span class="chev">›</span></button></div>';
   if(g2) h+='<p class="note" style="margin-top:6px">Смуги й відсотки — частка вироків кожної області. Відкривається перелік вироків першої області; щоб побачити вироки другої, оберіть її першою.</p>';
   if(s&&s.hint) h+='<div class="alert a-info"><b>Зверніть увагу</b>'+esc(s.hint)+'</div>';
-  if(a==="111"&&k==="ч. 2") h+=K.alerts.map(x=>'<div class="alert a-warn"><b>'+esc(x.title)+'</b>'+esc(x.text)+'</div>').join("");
+  if(a==="111"&&k==="ч. 2") h+=KS.alerts.map(x=>'<div class="alert a-warn"><b>'+esc(x.title)+'</b>'+esc(x.text)+'</div>').join("");
   if(t||t2){
     h+='<div class="sh">Як розглядали</div><div class="group">'+row(v+"|z","Заочно (спеціальне судове провадження)",fl(rr,1),undefined,fl(rr2,1).length)+'</div>'+
      '<div class="sh">Інші наслідки</div><div class="group">'+row(v+"|s75","Звільнено з випробуванням (ст. 75)",fl(rr,2),undefined,fl(rr2,2).length)+row(v+"|ug","Угода про визнання винуватості",fl(rr,4),undefined,fl(rr2,4).length)+row(v+"|s69","Нижче нижньої межі (ст. 69)",fl(rr,8),undefined,fl(rr2,8).length)+row(v+"|kf","Конфіскація майна за цією частиною",kf(rr),undefined,kf(rr2).length)+'</div>';
@@ -465,7 +478,7 @@ function vRegions(){
   return header("Практика за регіонами"+(ik!=="sbu"&&S.inst!=="all"?": "+(INST[ik]||[iname])[0]:""))+'<div class="wrap">'+(S.inst==="all"?segReg(ik):'')+perSel()+regSel()+complNote()+
    '<div class="sh">На які постанови ВС посилаються суди · '+esc(rname(g))+' <span class="badge b-ok">Дані ЄДРСР</span></div>'+
    '<p class="note" style="margin-top:0">Вироків за підслідністю '+iname+': '+R.n+'. Номер справи Верховного Суду розпізнано в '+R.withvs+' з них.'+(R2?' '+esc(rname(g2))+': '+R2.n+' вироків, номер справи ВС — у '+R2.withvs+'.':'')+' Натисніть на справу, щоб відкрити постанову ВС і вироки, які на неї посилаються.</p><div class="group">'+rows+'</div>'+
-   '<p class="note">Число — у скількох вироках згадано цю справу. Згадка не означає, що суд застосував висновок: суд міг і відхилити постанову, на яку послалася сторона. Постанову ВС знайдено у відкритих даних ДСА за номером справи й датою, яку наводять вироки. Номер справи ВС розпізнано автоматично, тому частина посилань могла не потрапити. Порівняння областей не є оцінкою судів чи суддів.</p>'+srcNote()+'</div>';
+   '<p class="note">Число — у скількох вироках згадано цю справу. Згадка не означає, що суд застосував висновок: суд міг і відхилити постанову, на яку послалася сторона. Постанову ВС знайдено у відкритих даних ДСА за номером справи й датою, яку наводять вироки. Номер справи ВС розпізнано автоматично, тому частина посилань могла не потрапити. Порівняння областей не є оцінкою судів чи суддів.</p>'+(ik==="sbu"&&S.per!=="pre"?k111List():'')+srcNote()+'</div>';
 }
 function boxRow(g,sc,band){
   const pc=v=>Math.max(0,Math.min(100,(v-sc[0])/(sc[1]-sc[0])*100)), f=x=>String(x).replace(".",",");
@@ -476,8 +489,8 @@ function boxRow(g,sc,band){
    '<div class="bxsum num">Медіана '+f(md)+' р. · половина вироків: '+f(q1)+'–'+f(q3)+' р. · розмах '+f(mn)+'–'+f(mx)+' р.</div></div>';
 }
 function vSent(v){
-  const [a,k]=v.split("|"), s=SENT[v];
-  if(a==="111"&&K.parts[k]) return vSent111(k);
+  const [a,k,r]=v.split("|"), s=SENT[v];
+  if(a==="111"&&kSet(r).parts[k]) return vSent111(k);
   let h=header(k+" ст. "+a+" КК",true,true)+'<div class="wrap">';
   if(!s) return h+'<p class="note">Для цієї частини макет не заповнено. У повній версії тут ті самі блоки: санкція, фактичні межі за формою провадження, додаткові покарання, зміни в апеляції.</p></div>';
   const pc=x=>(x-s.scale[0])/(s.scale[1]-s.scale[0])*100, ticks=[...new Set([s.scale[0],s.band[0],s.band[1],s.scale[1]])];
@@ -537,7 +550,7 @@ function vCheck(){
    '<p class="note">Номер справи є лише в частини позицій бази ('+caseIdx.size+' справ), тому «немає в базі» трапляється й для справжніх постанов.</p></div>';
 }
 function vAbout(){
-  const rows=[["Позиції","Офіційні правові позиції ККС ВС і Великої Палати ВС у кримінальних справах: "+POS.length+" позицій, на які посилаються статті бази LEX_K."],["Тези","Короткий виклад позиції з бази LEX_K. Офіційний текст завжди показано поруч."],["Посилання","Кожна позиція веде на текст рішення в ЄДРСР."],["Відступи","Показано позначки бази правових позицій ВС: «з відступом» і «змінена»."],["Покарання і регіони","Вироки за підслідністю СБУ (ч. 2 ст. 216 КПК) з "+GS.from+": відкриті дані ДСА, ліцензія CC BY. Повторні публікації одного вироку відкинуто. Розбір резолютивної частини автоматичний, кожен вирок має посилання на ЄДРСР."],["Пілот за ст. 111","Вироки судів Сумської області 2024–2026 рр., звірені вручну."],["Досудове","Питання досудового розслідування у справах СБУ з ключовими позиціями ВС; що ВС не вирішував — висновок бази LEX_K."],["Посилання у вироках","У картці позиції — вироки за підслідністю СБУ, у яких розпізнано номер справи, на якій стоїть позиція. Посилання не означає застосування висновку."],["Судді","Пошуку, фільтрів і статистики за суддями немає."],["Ваші запити","Пошук і перевірка працюють на пристрої, нічого не надсилається."]];
+  const rows=[["Позиції","Офіційні правові позиції ККС ВС і Великої Палати ВС у кримінальних справах: "+POS.length+" позицій, на які посилаються статті бази LEX_K."],["Тези","Короткий виклад позиції з бази LEX_K. Офіційний текст завжди показано поруч."],["Посилання","Кожна позиція веде на текст рішення в ЄДРСР."],["Відступи","Показано позначки бази правових позицій ВС: «з відступом» і «змінена»."],["Покарання і регіони","Вироки за підслідністю СБУ (ч. 2 ст. 216 КПК) з "+GS.from+": відкриті дані ДСА, ліцензія CC BY. Повторні публікації одного вироку відкинуто. Розбір резолютивної частини автоматичний, кожен вирок має посилання на ЄДРСР."],["Ст. 111 за округами","Вироки 2024–2026 рр. за апеляційними округами. Сумщину звірено вручну. Київ і Київська область, Одеська, Дніпропетровська, Харківська області — автоматичний розбір текстів із відкритих даних ДСА."],["Досудове","Питання досудового розслідування у справах СБУ з ключовими позиціями ВС; що ВС не вирішував — висновок бази LEX_K."],["Посилання у вироках","У картці позиції — вироки за підслідністю СБУ, у яких розпізнано номер справи, на якій стоїть позиція. Посилання не означає застосування висновку."],["Судді","Пошуку, фільтрів і статистики за суддями немає."],["Ваші запити","Пошук і перевірка працюють на пристрої, нічого не надсилається."]];
   return header("Про дані",true)+'<div class="wrap"><div class="group">'+rows.map(r=>'<div class="row"><span class="main"><span class="t">'+r[0]+'</span><div class="s" style="font-size:14px">'+r[1]+'</div></span></div>').join("")+'</div><p class="note">Зріз бази: '+CUT+'.</p></div>';
 }
 
@@ -649,11 +662,11 @@ function view(t){
   if(t.v==="marked") return vMarked();
   if(t.v==="refs") return vRefs();
   if(t.v==="sent") return vSent(t.p);
-  if(t.v==="sentlist") return vList111();
+  if(t.v==="sentlist") return vList111(t.p);
   if(t.v==="sa") return vSentArt(t.p);
   if(t.v==="sp") return vSentPart(t.p);
   if(t.v==="sim") return vSimilar(t.p);
-  if(t.v==="pilot111") return vPilot111();
+  if(t.v==="pilot111") return vPilot111(t.p);
   if(t.v==="pre") return vPre(t.p);
   if(t.v==="check") return vCheck();
   if(t.v==="about") return vAbout();
@@ -699,6 +712,8 @@ document.addEventListener("click",e=>{
   else if(a==="pg"){ const i=v.lastIndexOf("|"); S.pg[v.slice(0,i)]=+v.slice(i+1); render(true); }
   else if(a==="pre") push("pre",v);
   else if(a==="go") push(v);
+  else if(a==="p111") push("pilot111",v);
+  else if(a==="slist") push("sentlist",v);
   else if(a==="quick"){ S.q=v; render(); }
   else if(a==="iart") push("iart",v);
   else if(a==="full"){ S.full[v]=true; render(true); }
