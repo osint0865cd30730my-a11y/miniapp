@@ -1024,15 +1024,37 @@ function posDraft(data, st, tried = []) {
 
 // «Справа тижня» (субота) і «Позиція, яку варто знати» (свята): спершу постанови Великої Палати, далі ККС —
 // питання, відповідь ВС, повний текст позиції. Фабули справ у базі немає, тож пост будується з самої позиції.
+// У частині позицій бази теза (h) лише повторює назву питання (t). Тоді «Відповідь ВС» беремо з перших речень
+// тексту позиції (x), а решту тексту — у згорнуту цитату; так питання й відповідь у пості не дублюються.
+const normTH = s => (s || "").toLowerCase().replace(/\((?:з відступом|змінена|змінено)\)/g, "").replace(/[^\p{L}\d]+/gu, " ").trim();
+function thSame(p) {
+  const a = normTH(p.t), b = normTH(p.h);
+  return !b || a === b || (b.startsWith(a) && b.length - a.length < 40) || a.startsWith(b);
+}
+function leadSentences(x, min = 250, max = 700) {
+  const ss = (x || "").replace(/\s+/g, " ").trim().split(/(?<=[.;])\s+(?=[А-ЯІЇЄҐA-Z«])/);
+  let out = "", k = 0;
+  while (k < ss.length && (out.length < min || out.length + ss[k].length < max * 0.6) && out.length + ss[k].length <= max) out += (out ? " " : "") + ss[k++];
+  if (!out) return { lead: cut(x, max), rest: "" };
+  return { lead: out, rest: ss.slice(k).join(" ") };
+}
+function qaParts(p) {
+  if (!thSame(p)) return { q: p.t, a: p.h, rest: p.x || "" };
+  const { lead, rest } = leadSentences(p.x);
+  return { q: p.t, a: lead, rest };
+}
+
 function caseDraft(data, st, tried = [], holiday = false) {
-  const pool = posPool(data, st, tried).filter(p => p.h && p.t)
+  const pool = posPool(data, st, tried).filter(p => p.t && (p.h && !thSame(p) || p.x && p.x.length > 200))
     .sort((a, b) => (b.c === "ВП") - (a.c === "ВП") || pdate(b).localeCompare(pdate(a)));
   const p = pool[0];
   if (!p) return null;
   const arts = p.r.slice(0, 3);
   let text = "<b>" + (holiday ? "Позиція, яку варто знати" : "Справа тижня") + "</b> · " + esc(court(p)) +
-    "\n\n<b>Питання.</b> " + esc(cut(p.t, 500)) + "\n\n<b>Відповідь ВС.</b> " + esc(cut(p.h, 900));
-  if (p.x) text += "\n\n<blockquote expandable>" + esc(cut(p.x, 1800)) + "</blockquote>";
+    "\n\n<b>Питання.</b> " + esc(cut(p.t, 500));
+  const qa = qaParts(p);
+  text += "\n\n<b>Відповідь ВС.</b> " + esc(cut(qa.a, 900));
+  if (qa.rest && qa.rest.length > 60) text += "\n\n<blockquote expandable>" + esc(cut(qa.rest, 1800)) + "</blockquote>";
   text += "\n<i>" + esc(mark(p) + meta(p)) + "</i>" +
     "\n\nВисновки ВС щодо застосування норм права суди враховують при вирішенні подібних справ (ч. 6 ст. 13 Закону «Про судоустрій і статус суддів»). Збережіть, щоб мати під рукою.";
   if (arts.length) text += "\n\n" + arts.map(artTag).join(" ");
