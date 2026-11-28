@@ -200,7 +200,10 @@ async function onMessage(env, m) {
   const posts = await loadQueue(env);
   if (text === '/zaraz') {
     const today = posts.filter((p) => p.date === kyivDate());
-    if (!today.length) return tg(env, 'sendMessage', { chat_id: m.chat.id, text: 'На сьогодні в черзі поста немає. /rezerv — пост із резерву.' });
+    if (!today.length) {
+      const r = await nextReserve(env, posts);
+      return r ? sendDraft(env, r, 'На сьогодні в черзі нічого не заплановано — пост із резерву') : tg(env, 'sendMessage', { chat_id: m.chat.id, text: 'На сьогодні в черзі поста немає, резерв порожній.' });
+    }
     for (const p of today) await sendDraft(env, p);
     return;
   }
@@ -232,9 +235,27 @@ async function daily(env) {
   const due = [];
   for (const p of posts) if (p.date === today && !(await getState(env, p.id))) due.push(p);
   for (const p of due) await sendDraft(env, p);
-  const ahead = posts.filter((p) => p.date && p.date > today).length;
-  if (!due.length) await tg(env, 'sendMessage', { chat_id: env.OWNER_ID, text: 'Fabula: на сьогодні в черзі поста немає. /rezerv — взяти з резерву.' });
-  if (ahead < 3) await tg(env, 'sendMessage', { chat_id: env.OWNER_ID, text: `Fabula: у черзі лишилося постів на ${ahead} дн. Час поповнити.` });
+  // На сьогодні нічого не заплановано — канал не мовчить: чернетка з резерву.
+  let reserveUsed = null;
+  if (!due.length && !posts.some((p) => p.date === today)) {
+    reserveUsed = await nextReserve(env, posts);
+    if (reserveUsed) await sendDraft(env, reserveUsed, 'На сьогодні в черзі нічого не заплановано — пост із резерву');
+  }
+  const first = posts.filter((p) => p.date && p.date > today).map((p) => p.date).sort()[0];
+  if (!due.length && !reserveUsed && !posts.some((p) => p.date === today)) {
+    await tg(env, 'sendMessage', { chat_id: env.OWNER_ID, text: `Fabula: на сьогодні поста немає, резерв порожній.${first ? ' Найближчий пост у черзі — ' + first + '.' : ' Черга порожня.'}` });
+  }
+  // Попередження наперед: дні без поста на найближчі три дні.
+  const gaps = [];
+  for (let i = 1; i <= 3; i++) {
+    const d = kyivDate(new Date(Date.now() + i * 864e5));
+    if (!posts.some((p) => p.date === d)) gaps.push(d);
+  }
+  let reserve = 0;
+  for (const p of posts) if (!p.date && !p.pin && p !== reserveUsed && !(await getState(env, p.id))) reserve++;
+  if (gaps.length > reserve) {
+    await tg(env, 'sendMessage', { chat_id: env.OWNER_ID, text: `Fabula: без поста в черзі ${gaps.join(', ')}; у резерві ${reserve}. Час поповнити.` });
+  }
 }
 
 export default {
